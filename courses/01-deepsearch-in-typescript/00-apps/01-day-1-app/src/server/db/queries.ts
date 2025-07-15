@@ -7,7 +7,7 @@ export const upsertChat = async (opts: {
   userId: string;
   chatId: string;
   title: string;
-  messages: AIMessage[];
+  messages: Array<{ role: string; parts: any[]; order: number }>;
 }) => {
   // Check if chat exists
   const existingChat = await db.query.chats.findFirst({

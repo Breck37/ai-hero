@@ -9,6 +9,9 @@ import { users } from "~/server/db/schema";
 import { eq } from "drizzle-orm";
 import { checkAndRecordRateLimit } from "~/server/db/rate-limit";
 import { experimental_createMCPClient as createMCPClient } from "ai";
+import { upsertChat } from "~/server/db/queries";
+import { appendResponseMessages } from "ai";
+import { randomUUID } from "crypto";
 
 // To run the Everything MCP Server locally:
 // npx @modelcontextprotocol/server-everything sse
@@ -57,7 +60,44 @@ export async function POST(request: Request) {
 
   const body = (await request.json()) as {
     messages: Array<Message>;
+    chatId?: string;
+    title?: string;
   };
+
+  // Determine chatId (generate if not provided)
+  let chatId = body.chatId || randomUUID();
+
+  // Helper to extract a chat title from the first user message's first text part
+  function getChatTitle(messages: Message[]): string {
+    const first = messages[0];
+    if (!first || !first.parts || !Array.isArray(first.parts))
+      return "New Chat";
+    const textPart = first.parts.find(
+      (p) =>
+        p &&
+        typeof p === "object" &&
+        "text" in p &&
+        typeof (p as any).text === "string",
+    );
+    return textPart && (textPart as any).text
+      ? (textPart as any).text.slice(0, 40)
+      : "New Chat";
+  }
+  const chatTitle = body.title || getChatTitle(body.messages);
+
+  // If chatId not provided, create chat with first user message before streaming
+  if (!body.chatId) {
+    await upsertChat({
+      userId,
+      chatId,
+      title: chatTitle,
+      messages: body.messages.map((m, i) => ({
+        role: m.role,
+        parts: m.parts ?? [],
+        order: i,
+      })),
+    });
+  }
 
   return createDataStreamResponse({
     execute: async (dataStream: any) => {
@@ -113,6 +153,23 @@ export async function POST(request: Request) {
         },
         system: `You are an AI assistant with access to a web search tool. Always use the searchWeb tool to answer user questions, and always cite your sources with inline markdown links. Use the provided 'siteName' field as the link label (e.g., [siteName](url)). Do not answer from your own knowledge; always search the web and cite sources.`,
         maxSteps: 10,
+        onFinish: async ({ response }) => {
+          // Merge messages and save to DB
+          const updatedMessages = appendResponseMessages({
+            messages: body.messages,
+            responseMessages: response.messages,
+          });
+          await upsertChat({
+            userId,
+            chatId,
+            title: chatTitle,
+            messages: updatedMessages.map((m, i) => ({
+              role: m.role,
+              parts: m.parts ?? [],
+              order: i,
+            })),
+          });
+        },
       });
 
       result.mergeIntoDataStream(dataStream);
