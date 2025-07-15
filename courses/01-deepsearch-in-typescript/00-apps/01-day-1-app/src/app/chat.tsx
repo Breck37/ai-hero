@@ -4,6 +4,7 @@ import { ChatMessage } from "~/components/chat-message";
 import { SignInModal } from "~/components/sign-in-modal";
 import { useChat } from "@ai-sdk/react";
 import { Square } from "lucide-react";
+import { ErrorMessage } from "~/components/error-message";
 
 interface ChatProps {
   userName: string;
@@ -11,8 +12,15 @@ interface ChatProps {
 }
 
 export const ChatPage = ({ userName, isAuthenticated }: ChatProps) => {
-  const { messages, input, handleInputChange, handleSubmit, isLoading } =
-    useChat();
+  const {
+    messages,
+    input,
+    handleInputChange,
+    handleSubmit,
+    isLoading,
+    error,
+    reload,
+  } = useChat();
 
   return (
     <>
@@ -34,6 +42,26 @@ export const ChatPage = ({ userName, isAuthenticated }: ChatProps) => {
           })}
         </div>
 
+        {/* Error message display */}
+        {error && (
+          <div className="mb-2">
+            <ErrorMessage
+              message={
+                typeof error === "string"
+                  ? error
+                  : error.message || "An error occurred."
+              }
+            />
+            <button
+              type="button"
+              onClick={() => reload()}
+              className="mt-2 rounded bg-gray-700 px-4 py-2 text-white hover:bg-gray-600 focus:border-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-400"
+            >
+              Retry
+            </button>
+          </div>
+        )}
+
         <div className="border-t border-gray-700">
           <form onSubmit={handleSubmit} className="mx-auto max-w-[65ch] p-4">
             <div className="flex gap-2">
@@ -44,11 +72,11 @@ export const ChatPage = ({ userName, isAuthenticated }: ChatProps) => {
                 autoFocus
                 aria-label="Chat input"
                 className="flex-1 rounded border border-gray-700 bg-gray-800 p-2 text-gray-200 placeholder-gray-400 focus:border-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-400 disabled:opacity-50"
-                disabled={isLoading || !isAuthenticated}
+                disabled={isLoading || !isAuthenticated || !!error}
               />
               <button
                 type="submit"
-                disabled={isLoading || !isAuthenticated}
+                disabled={isLoading || !isAuthenticated || !!error}
                 className="rounded bg-gray-700 px-4 py-2 text-white hover:bg-gray-600 focus:border-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-400 disabled:opacity-50 disabled:hover:bg-gray-700"
               >
                 {isLoading ? (

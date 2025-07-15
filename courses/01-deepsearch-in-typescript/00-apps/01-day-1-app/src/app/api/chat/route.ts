@@ -4,6 +4,10 @@ import { model } from "@/model";
 import { auth } from "~/server/auth";
 import { searchSerper } from "~/serper";
 import { z } from "zod";
+import { db } from "~/server/db";
+import { users } from "~/server/db/schema";
+import { eq } from "drizzle-orm";
+import { checkAndRecordRateLimit } from "~/server/db/rate-limit";
 
 export const maxDuration = 60;
 
@@ -11,6 +15,26 @@ export async function POST(request: Request) {
   const session = await auth();
   if (!session?.user) {
     return new Response("Unauthorized", { status: 401 });
+  }
+
+  const userId = session.user.id;
+  // Fetch user to check admin status
+  const user = await db.query.users.findFirst({ where: eq(users.id, userId) });
+  if (!user) {
+    return new Response("Unauthorized", { status: 401 });
+  }
+  const isAdmin = user.isAdmin;
+
+  // Use the reusable rate limit hook
+  const { allowed, error: rateLimitError } = await checkAndRecordRateLimit({
+    db,
+    userId,
+    endpoint: "chat",
+    isAdmin,
+    maxRequestsPerDay: 100,
+  });
+  if (!allowed) {
+    return new Response(rateLimitError || "Too Many Requests", { status: 429 });
   }
 
   const body = (await request.json()) as {
