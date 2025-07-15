@@ -5,6 +5,7 @@ import { ChatPage } from "./chat.tsx";
 import { AuthButton } from "../components/auth-button.tsx";
 import { getChats, getChat } from "~/server/db/queries";
 import type { Message as AIMessage } from "ai";
+import { connection } from "next/server";
 
 export default async function HomePage({
   searchParams,
@@ -15,15 +16,24 @@ export default async function HomePage({
   const userName = session?.user?.name ?? "Guest";
   const isAuthenticated = !!session?.user;
   const userId = session?.user?.id;
-  const { id: chatId } = await searchParams;
+  const { id: chatIdFromUrl } = await searchParams;
+
+  /**
+   * Next.js requires await connection() before using crypto.randomUUID() in a server component.
+   * This ensures that the generated UUID is unique per request and not cached across requests.
+   * See: https://nextjs.org/docs/messages/next-prerender-crypto
+   */
+  await connection();
+  const chatId = chatIdFromUrl ?? crypto.randomUUID();
+  const isNewChat = !chatIdFromUrl;
 
   let chats: any[] = [];
   let initialMessages: AIMessage[] | undefined = undefined;
 
   if (isAuthenticated && userId) {
     chats = await getChats({ userId });
-    if (chatId) {
-      const chat = await getChat({ userId, chatId });
+    if (!isNewChat) {
+      const chat = await getChat({ userId, chatId: chatIdFromUrl });
       if (chat && chat.messages) {
         initialMessages = chat.messages.map((msg) => ({
           id: String(msg.id),
@@ -60,7 +70,7 @@ export default async function HomePage({
                 <Link
                   href={`/?id=${chat.id}`}
                   className={`flex-1 rounded-lg p-3 text-left text-sm text-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-400 ${
-                    chat.id === chatId
+                    chat.id === chatIdFromUrl
                       ? "bg-gray-700"
                       : "hover:bg-gray-750 bg-gray-800"
                   }`}
@@ -86,9 +96,11 @@ export default async function HomePage({
       </div>
 
       <ChatPage
+        key={chatId}
         userName={userName}
         isAuthenticated={isAuthenticated}
         chatId={chatId}
+        isNewChat={isNewChat}
         initialMessages={initialMessages}
       />
     </div>

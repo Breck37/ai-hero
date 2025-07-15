@@ -7,11 +7,13 @@ import { Square } from "lucide-react";
 import { ErrorMessage } from "~/components/error-message";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
+import { StickToBottom } from "use-stick-to-bottom";
 
 interface ChatProps {
   userName: string;
   isAuthenticated: boolean;
-  chatId: string | undefined;
+  chatId: string;
+  isNewChat: boolean;
   initialMessages?: import("ai").Message[];
 }
 
@@ -33,6 +35,7 @@ export const ChatPage = ({
   userName,
   isAuthenticated,
   chatId,
+  isNewChat,
   initialMessages,
 }: ChatProps) => {
   const {
@@ -45,7 +48,7 @@ export const ChatPage = ({
     reload,
     data,
   } = useChat({
-    body: { chatId },
+    body: { chatId, isNewChat },
     initialMessages,
   });
 
@@ -63,22 +66,28 @@ export const ChatPage = ({
   return (
     <>
       <div className="flex flex-1 flex-col">
-        <div
-          className="mx-auto w-full max-w-[65ch] flex-1 overflow-y-auto p-4 scrollbar-thin scrollbar-track-gray-800 scrollbar-thumb-gray-600 hover:scrollbar-thumb-gray-500"
-          role="log"
-          aria-label="Chat messages"
+        <StickToBottom
+          className="relative mx-auto max-h-[calc(100%-75px)] w-full max-w-[65ch] flex-1 p-4 [&>div]:scrollbar-thin [&>div]:scrollbar-track-gray-800 [&>div]:scrollbar-thumb-gray-600 [&>div]:hover:scrollbar-thumb-gray-500"
+          resize="smooth"
+          initial="smooth"
         >
-          {messages.map((message, index) => {
-            return (
-              <ChatMessage
-                key={index}
-                parts={message.parts ?? []}
-                role={message.role}
-                userName={userName}
-              />
-            );
-          })}
-        </div>
+          <StickToBottom.Content
+            className="flex flex-col gap-4 overflow-y-auto"
+            role="log"
+            aria-label="Chat messages"
+          >
+            {messages.map((message, index) => {
+              return (
+                <ChatMessage
+                  key={index}
+                  parts={message.parts ?? []}
+                  role={message.role}
+                  userName={userName}
+                />
+              );
+            })}
+          </StickToBottom.Content>
+        </StickToBottom>
 
         {/* Error message display */}
         {error && (
@@ -100,7 +109,7 @@ export const ChatPage = ({
           </div>
         )}
 
-        <div className="border-t border-gray-700">
+        <div className="border-t border-gray-700 bg-gray-900">
           <form onSubmit={handleSubmit} className="mx-auto max-w-[65ch] p-4">
             <div className="flex gap-2">
               <input

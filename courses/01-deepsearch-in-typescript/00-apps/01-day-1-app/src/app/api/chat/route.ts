@@ -60,12 +60,12 @@ export async function POST(request: Request) {
 
   const body = (await request.json()) as {
     messages: Array<Message>;
-    chatId?: string;
+    chatId: string;
+    isNewChat: boolean;
     title?: string;
   };
 
-  // Determine chatId (generate if not provided)
-  let chatId = body.chatId || randomUUID();
+  const { chatId, isNewChat } = body;
 
   // Helper to extract a chat title from the first user message's first text part
   function getChatTitle(messages: Message[]): string {
@@ -85,8 +85,7 @@ export async function POST(request: Request) {
   }
   const chatTitle = body.title || getChatTitle(body.messages);
 
-  // If chatId not provided, create chat with first user message before streaming
-  if (!body.chatId) {
+  if (isNewChat) {
     await upsertChat({
       userId,
       chatId,
@@ -101,8 +100,7 @@ export async function POST(request: Request) {
 
   return createDataStreamResponse({
     execute: async (dataStream: any) => {
-      // If a new chat was just created, notify the frontend
-      if (!body.chatId) {
+      if (isNewChat) {
         dataStream.writeData({
           type: "NEW_CHAT_CREATED",
           chatId,
