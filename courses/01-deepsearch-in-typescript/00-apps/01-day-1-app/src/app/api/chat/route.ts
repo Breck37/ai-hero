@@ -20,7 +20,6 @@ export async function POST(request: Request) {
   return createDataStreamResponse({
     execute: async (dataStream: any) => {
       const { messages } = body;
-      console.log(messages);
       const result = streamText({
         model,
         messages,
