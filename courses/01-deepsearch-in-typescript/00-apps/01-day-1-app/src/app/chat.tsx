@@ -12,6 +12,7 @@ interface ChatProps {
   userName: string;
   isAuthenticated: boolean;
   chatId: string | undefined;
+  initialMessages?: import("ai").Message[];
 }
 
 // Utility type guard for NEW_CHAT_CREATED event
@@ -28,7 +29,12 @@ function isNewChatCreated(
   );
 }
 
-export const ChatPage = ({ userName, isAuthenticated, chatId }: ChatProps) => {
+export const ChatPage = ({
+  userName,
+  isAuthenticated,
+  chatId,
+  initialMessages,
+}: ChatProps) => {
   const {
     messages,
     input,
@@ -40,6 +46,7 @@ export const ChatPage = ({ userName, isAuthenticated, chatId }: ChatProps) => {
     data,
   } = useChat({
     body: { chatId },
+    initialMessages,
   });
 
   const isLoading = status === "streaming" || status === "submitted";
