@@ -8,6 +8,24 @@ import { db } from "~/server/db";
 import { users } from "~/server/db/schema";
 import { eq } from "drizzle-orm";
 import { checkAndRecordRateLimit } from "~/server/db/rate-limit";
+import { experimental_createMCPClient as createMCPClient } from "ai";
+
+// To run the Everything MCP Server locally:
+// npx @modelcontextprotocol/server-everything sse
+// This will start the server at http://localhost:3000/sse
+
+let mcpClient: Awaited<ReturnType<typeof createMCPClient>> | null = null;
+async function getMCPClient() {
+  if (!mcpClient) {
+    mcpClient = await createMCPClient({
+      transport: {
+        type: "sse",
+        url: "http://localhost:3001/sse",
+      },
+    });
+  }
+  return mcpClient;
+}
 
 export const maxDuration = 60;
 
@@ -44,11 +62,14 @@ export async function POST(request: Request) {
   return createDataStreamResponse({
     execute: async (dataStream: any) => {
       const { messages } = body;
+      const mcp = await getMCPClient();
+      const tools = await mcp.tools();
+      console.log({ tools });
       const result = streamText({
         model,
         messages,
-        system: `You are an AI assistant with access to a web search tool. Always use the searchWeb tool to answer user questions, and always cite your sources with inline markdown links. Use the provided 'siteName' field as the link label (e.g., [siteName](url)). Do not answer from your own knowledge; always search the web and cite sources.`,
         tools: {
+          ...tools,
           searchWeb: {
             parameters: z.object({
               query: z.string().describe("The query to search the web for"),
@@ -58,21 +79,16 @@ export async function POST(request: Request) {
                 { q: query, num: 10 },
                 abortSignal,
               );
-              // Extracts a readable site name from the title or prettifies the domain as fallback
               function getSiteName(title: string, url: string): string {
-                // Try to extract site name from title (e.g., "Article - Site Name" or "Article | Site Name")
                 const match = title.match(/[-|] ?([A-Za-z0-9 .&'’]+)$/);
                 if (match && match[1]) {
                   return match[1].trim();
                 }
-                // Fallback: prettify the domain
                 try {
                   const { hostname } = new URL(url);
-                  // Remove www., split on dots, take the first part
                   let name =
                     (hostname || "").replace(/^www\./, "").split(".")[0] ||
                     "Source";
-                  // Split on dashes/underscores, capitalize each part, join with space
                   return (
                     (name || "Source")
                       .split(/[-_]/)
@@ -89,12 +105,13 @@ export async function POST(request: Request) {
                 title: result.title,
                 link: result.link,
                 snippet: result.snippet,
-                source: getSiteName(result.title, result.link), // for backward compatibility
+                source: getSiteName(result.title, result.link),
                 siteName: getSiteName(result.title, result.link),
               }));
             },
           },
         },
+        system: `You are an AI assistant with access to a web search tool. Always use the searchWeb tool to answer user questions, and always cite your sources with inline markdown links. Use the provided 'siteName' field as the link label (e.g., [siteName](url)). Do not answer from your own knowledge; always search the web and cite sources.`,
         maxSteps: 10,
       });
 
