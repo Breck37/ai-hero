@@ -17,10 +17,12 @@ export const ChatPage = ({ userName, isAuthenticated }: ChatProps) => {
     input,
     handleInputChange,
     handleSubmit,
-    isLoading,
+    status,
     error,
     reload,
   } = useChat();
+
+  const isLoading = status === "streaming" || status === "submitted";
 
   return (
     <>
