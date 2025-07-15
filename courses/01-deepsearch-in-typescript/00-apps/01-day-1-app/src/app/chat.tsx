@@ -5,13 +5,30 @@ import { SignInModal } from "~/components/sign-in-modal";
 import { useChat } from "@ai-sdk/react";
 import { Square } from "lucide-react";
 import { ErrorMessage } from "~/components/error-message";
+import { useRouter } from "next/navigation";
+import { useEffect } from "react";
 
 interface ChatProps {
   userName: string;
   isAuthenticated: boolean;
+  chatId: string | undefined;
 }
 
-export const ChatPage = ({ userName, isAuthenticated }: ChatProps) => {
+// Utility type guard for NEW_CHAT_CREATED event
+function isNewChatCreated(
+  data: unknown,
+): data is { type: "NEW_CHAT_CREATED"; chatId: string } {
+  return (
+    typeof data === "object" &&
+    data !== null &&
+    "type" in data &&
+    (data as any).type === "NEW_CHAT_CREATED" &&
+    "chatId" in data &&
+    typeof (data as any).chatId === "string"
+  );
+}
+
+export const ChatPage = ({ userName, isAuthenticated, chatId }: ChatProps) => {
   const {
     messages,
     input,
@@ -20,9 +37,21 @@ export const ChatPage = ({ userName, isAuthenticated }: ChatProps) => {
     status,
     error,
     reload,
-  } = useChat();
+    data,
+  } = useChat({
+    body: { chatId },
+  });
 
   const isLoading = status === "streaming" || status === "submitted";
+
+  // Listen for NEW_CHAT_CREATED event and redirect
+  const router = useRouter();
+  useEffect(() => {
+    const lastDataItem = data?.[data.length - 1];
+    if (lastDataItem && isNewChatCreated(lastDataItem)) {
+      router.push(`?id=${lastDataItem.chatId}`);
+    }
+  }, [data, router]);
 
   return (
     <>

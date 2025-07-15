@@ -50,6 +50,42 @@ function ToolInvocationPart({
 }: {
   toolInvocation: ToolInvocation;
 }) {
+  // Helper to render sources as links if result is an array of { title, url }
+  function renderResult(result: any) {
+    if (
+      Array.isArray(result) &&
+      result.length > 0 &&
+      result.every(
+        (item) =>
+          item &&
+          typeof item === "object" &&
+          typeof item.title === "string" &&
+          typeof item.link === "string",
+      )
+    ) {
+      return (
+        <div className="mt-1 flex flex-col gap-2">
+          {result.map((item, i) => (
+            <a
+              key={i}
+              href={item.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-purple-400 underline hover:text-blue-300"
+            >
+              {item.title}
+            </a>
+          ))}
+        </div>
+      );
+    }
+    // Fallback: render as JSON
+    return (
+      <pre className="mt-1 overflow-x-auto rounded bg-green-900/60 p-2 text-green-100">
+        {JSON.stringify(result, null, 2)}
+      </pre>
+    );
+  }
   return (
     <div className="mb-4 rounded-lg border border-blue-500 bg-blue-950/60 p-4">
       <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-blue-400">
@@ -67,9 +103,7 @@ function ToolInvocationPart({
       {toolInvocation.state === "result" && (
         <div className="mt-3 text-xs text-green-200">
           <span className="font-mono">Result:</span>
-          <pre className="mt-1 overflow-x-auto rounded bg-green-900/60 p-2 text-green-100">
-            {JSON.stringify(toolInvocation.result, null, 2)}
-          </pre>
+          {renderResult(toolInvocation.result)}
         </div>
       )}
     </div>

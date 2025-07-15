@@ -101,10 +101,17 @@ export async function POST(request: Request) {
 
   return createDataStreamResponse({
     execute: async (dataStream: any) => {
+      // If a new chat was just created, notify the frontend
+      if (!body.chatId) {
+        dataStream.writeData({
+          type: "NEW_CHAT_CREATED",
+          chatId,
+        });
+      }
       const { messages } = body;
       const mcp = await getMCPClient();
       const tools = await mcp.tools();
-      console.log({ tools });
+
       const result = streamText({
         model,
         messages,
