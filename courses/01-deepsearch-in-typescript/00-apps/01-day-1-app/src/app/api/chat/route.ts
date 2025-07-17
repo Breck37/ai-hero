@@ -14,6 +14,7 @@ import { appendResponseMessages } from "ai";
 import { randomUUID } from "crypto";
 import { Langfuse } from "langfuse";
 import { env } from "~/env";
+import { bulkCrawlWebsites } from "~/scraper";
 
 // To run the Everything MCP Server locally:
 // npx @modelcontextprotocol/server-everything sse
@@ -171,8 +172,52 @@ export async function POST(request: Request) {
               }));
             },
           },
+          scrapePages: {
+            parameters: z.object({
+              urls: z
+                .array(z.string().url())
+                .describe(
+                  "Array of URLs to scrape and extract full content from",
+                ),
+            }),
+            execute: async ({ urls }, { abortSignal: _abortSignal }) => {
+              const result = await bulkCrawlWebsites({ urls });
+
+              if (!result.success) {
+                return {
+                  error: result.error,
+                  results: result.results.map((r) => ({
+                    url: r.url,
+                    success: r.result.success,
+                    data: r.result.success ? r.result.data : r.result.error,
+                  })),
+                };
+              }
+
+              return {
+                success: true,
+                results: result.results.map((r) => ({
+                  url: r.url,
+                  data: r.result.data,
+                })),
+              };
+            },
+          },
         },
-        system: `You are an AI assistant with access to a web search tool. Always use the searchWeb tool to answer user questions, and always cite your sources with inline markdown links. Use the provided 'siteName' field as the link label (e.g., [siteName](url)). Do not answer from your own knowledge; always search the web and cite sources.`,
+        system: `You are an AI assistant with access to web search and web scraping tools. 
+
+For general questions, use the searchWeb tool to find relevant information and always cite your sources with inline markdown links. Use the provided 'siteName' field as the link label (e.g., [siteName](url)).
+
+For detailed analysis of specific web pages, use the scrapePages tool to extract the full content of web pages. This tool will:
+- Check robots.txt to ensure crawling is allowed
+- Extract the main content from web pages, removing navigation, headers, footers, and other irrelevant elements
+- Convert the content to clean markdown format
+- Handle rate limiting and retries automatically
+- Cache results for better performance
+
+Use scrapePages when you need to analyze the full content of specific web pages rather than just search snippets. Always cite the source URLs when using scraped content.
+
+Do not answer from your own knowledge; always search the web and cite sources.`,
         maxSteps: 10,
         onFinish: async ({ response }) => {
           // Merge messages and save to DB
