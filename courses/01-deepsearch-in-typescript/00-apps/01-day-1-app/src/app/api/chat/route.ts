@@ -12,6 +12,8 @@ import { experimental_createMCPClient as createMCPClient } from "ai";
 import { upsertChat } from "~/server/db/queries";
 import { appendResponseMessages } from "ai";
 import { randomUUID } from "crypto";
+import { Langfuse } from "langfuse";
+import { env } from "~/env";
 
 // To run the Everything MCP Server locally:
 // npx @modelcontextprotocol/server-everything sse
@@ -29,6 +31,10 @@ async function getMCPClient() {
   }
   return mcpClient;
 }
+
+const langfuse = new Langfuse({
+  environment: env.NODE_ENV,
+});
 
 export const maxDuration = 60;
 
@@ -85,10 +91,13 @@ export async function POST(request: Request) {
   }
   const chatTitle = body.title || getChatTitle(body.messages);
 
+  // Create or get the current chat ID for Langfuse session
+  let currentChatId = chatId;
   if (isNewChat) {
+    currentChatId = randomUUID();
     await upsertChat({
       userId,
-      chatId,
+      chatId: currentChatId,
       title: chatTitle,
       messages: body.messages.map((m, i) => ({
         role: m.role,
@@ -98,12 +107,19 @@ export async function POST(request: Request) {
     });
   }
 
+  // Create Langfuse trace with user and session
+  const trace = langfuse.trace({
+    sessionId: currentChatId,
+    name: "chat",
+    userId: session.user.id,
+  });
+
   return createDataStreamResponse({
     execute: async (dataStream: any) => {
       if (isNewChat) {
         dataStream.writeData({
           type: "NEW_CHAT_CREATED",
-          chatId,
+          chatId: currentChatId,
         });
       }
       const { messages } = body;
@@ -125,7 +141,7 @@ export async function POST(request: Request) {
                 abortSignal,
               );
               function getSiteName(title: string, url: string): string {
-                const match = title.match(/[-|] ?([A-Za-z0-9 .&'’]+)$/);
+                const match = title.match(/[-|] ?([A-Za-z0-9 .&'']+)$/);
                 if (match && match[1]) {
                   return match[1].trim();
                 }
@@ -166,7 +182,7 @@ export async function POST(request: Request) {
           });
           await upsertChat({
             userId,
-            chatId,
+            chatId: currentChatId,
             title: chatTitle,
             messages: updatedMessages.map((m, i) => ({
               role: m.role,
@@ -174,6 +190,16 @@ export async function POST(request: Request) {
               order: i,
             })),
           });
+
+          // Flush the trace to Langfuse
+          await langfuse.flushAsync();
+        },
+        experimental_telemetry: {
+          isEnabled: true,
+          functionId: "Asuhhhh-dude-wizard",
+          metadata: {
+            langfuseTraceId: trace.id,
+          },
         },
       });
 
