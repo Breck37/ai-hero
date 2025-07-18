@@ -60,7 +60,7 @@ function ToolInvocationPart({
           item &&
           typeof item === "object" &&
           typeof item.title === "string" &&
-          typeof item.link === "string",
+          (typeof item.link === "string" || typeof item.url === "string"),
       )
     ) {
       return (
@@ -68,7 +68,7 @@ function ToolInvocationPart({
           {result.map((item, i) => (
             <a
               key={i}
-              href={item.url}
+              href={item.link || item.url}
               target="_blank"
               rel="noopener noreferrer"
               className="text-purple-400 underline hover:text-blue-300"
