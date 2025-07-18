@@ -6,7 +6,7 @@ import { useChat } from "@ai-sdk/react";
 import { Square } from "lucide-react";
 import { ErrorMessage } from "~/components/error-message";
 import { useRouter } from "next/navigation";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { StickToBottom } from "use-stick-to-bottom";
 
 interface ChatProps {
@@ -53,32 +53,24 @@ export const ChatPage = ({
   });
 
   const isLoading = status === "streaming" || status === "submitted";
+  const hasRedirected = useRef(false);
 
-  // Listen for NEW_CHAT_CREATED event and redirect
+  // Listen for NEW_CHAT_CREATED event and update URL
   const router = useRouter();
   useEffect(() => {
     const lastDataItem = data?.[data.length - 1];
-    if (lastDataItem && isNewChatCreated(lastDataItem)) {
-      console.log("New chat created:", lastDataItem.chatId);
+    if (
+      lastDataItem &&
+      isNewChatCreated(lastDataItem) &&
+      !hasRedirected.current
+    ) {
+      console.log("New chat created, updating URL:", lastDataItem.chatId);
+      hasRedirected.current = true;
 
-      // Wait for streaming to complete before redirecting
-      const waitForCompletion = () => {
-        if (status === "ready" && !isLoading) {
-          console.log(
-            "Streaming complete, redirecting to:",
-            lastDataItem.chatId,
-          );
-          router.push(`?id=${lastDataItem.chatId}`);
-        } else {
-          // Check again in 100ms
-          setTimeout(waitForCompletion, 100);
-        }
-      };
-
-      // Start waiting for completion
-      setTimeout(waitForCompletion, 100);
+      // Update URL without causing a component re-render
+      router.replace(`?id=${lastDataItem.chatId}`, { scroll: false });
     }
-  }, [data, router, status, isLoading]);
+  }, [data, router]);
 
   return (
     <>
