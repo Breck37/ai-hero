@@ -59,9 +59,26 @@ export const ChatPage = ({
   useEffect(() => {
     const lastDataItem = data?.[data.length - 1];
     if (lastDataItem && isNewChatCreated(lastDataItem)) {
-      router.push(`?id=${lastDataItem.chatId}`);
+      console.log("New chat created:", lastDataItem.chatId);
+
+      // Wait for streaming to complete before redirecting
+      const waitForCompletion = () => {
+        if (status === "ready" && !isLoading) {
+          console.log(
+            "Streaming complete, redirecting to:",
+            lastDataItem.chatId,
+          );
+          router.push(`?id=${lastDataItem.chatId}`);
+        } else {
+          // Check again in 100ms
+          setTimeout(waitForCompletion, 100);
+        }
+      };
+
+      // Start waiting for completion
+      setTimeout(waitForCompletion, 100);
     }
-  }, [data, router]);
+  }, [data, router, status, isLoading]);
 
   return (
     <>
