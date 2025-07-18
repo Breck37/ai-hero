@@ -89,27 +89,28 @@ export const ChatPage = ({
           </StickToBottom.Content>
         </StickToBottom>
 
-        {/* Error message display */}
-        {error && (
-          <div className="mb-2">
-            <ErrorMessage
-              message={
-                typeof error === "string"
-                  ? error
-                  : error.message || "An error occurred."
-              }
-            />
-            <button
-              type="button"
-              onClick={() => reload()}
-              className="mt-2 rounded bg-gray-700 px-4 py-2 text-white hover:bg-gray-600 focus:border-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-400"
-            >
-              Retry
-            </button>
-          </div>
-        )}
-
-        <div className="border-t border-gray-700 bg-gray-900">
+        <div className="relative border-t border-gray-700 bg-gray-900">
+          {/* Error message display - absolutely positioned above input */}
+          {error && (
+            <div className="absolute bottom-full left-0 right-0 z-10 p-4">
+              <div className="mx-auto max-w-[65ch]">
+                <ErrorMessage
+                  message={
+                    typeof error === "string"
+                      ? error
+                      : error.message || "An error occurred."
+                  }
+                />
+                <button
+                  type="button"
+                  onClick={() => reload()}
+                  className="mt-2 rounded bg-gray-700 px-4 py-2 text-white hover:bg-gray-600 focus:border-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-400"
+                >
+                  Retry
+                </button>
+              </div>
+            </div>
+          )}
           <form onSubmit={handleSubmit} className="mx-auto max-w-[65ch] p-4">
             <div className="flex gap-2">
               <input

@@ -175,7 +175,7 @@ export async function POST(request: Request) {
           scrapePages: {
             parameters: z.object({
               urls: z
-                .array(z.string().url())
+                .array(z.string())
                 .describe(
                   "Array of URLs to scrape and extract full content from",
                 ),
@@ -206,18 +206,41 @@ export async function POST(request: Request) {
         },
         system: `You are an AI assistant with access to web search and web scraping tools. 
 
-For general questions, use the searchWeb tool to find relevant information and always cite your sources with inline markdown links. Use the provided 'siteName' field as the link label (e.g., [siteName](url)).
+ALWAYS follow this workflow:
+1. Use the searchWeb tool to find relevant URLs for the user's question
+2. ALWAYS use the scrapePages tool to extract the full content from the most relevant URLs found in step 1
+3. Analyze the scraped content to provide detailed, comprehensive answers
+4. Always cite your sources with inline markdown links using the source URLs
 
-For detailed analysis of specific web pages, use the scrapePages tool to extract the full content of web pages. This tool will:
-- Check robots.txt to ensure crawling is allowed
-- Extract the main content from web pages, removing navigation, headers, footers, and other irrelevant elements
-- Convert the content to clean markdown format
-- Handle rate limiting and retries automatically
-- Cache results for better performance
+IMPORTANT: Never rely solely on search snippets. ALWAYS scrape the full content of relevant pages to provide the most accurate and detailed answers possible.
 
-Use scrapePages when you need to analyze the full content of specific web pages rather than just search snippets. Always cite the source URLs when using scraped content.
+URL Selection Strategy:
+- Prioritize URLs that appear most relevant to the user's specific question
+- ALWAYS scrape 4-6 URLs for comprehensive coverage
+- Ensure diversity in sources - include different websites, perspectives, and content types
+- Avoid scraping multiple pages from the same domain unless absolutely necessary
+- Include a mix of different sources for balanced perspective (news sites, blogs, official documentation, etc.)
+- For simple factual questions, still use 4-6 sources to ensure accuracy
+- For complex analysis, use the full 4-6 diverse sources for thorough coverage
 
-Do not answer from your own knowledge; always search the web and cite sources.`,
+Response Quality Guidelines:
+- Structure your responses with clear sections and bullet points when appropriate
+- Include specific quotes or data from the scraped content to support your points
+- If information is conflicting between sources, acknowledge and explain the differences
+- Be specific and detailed in your responses
+- Always include source citations with proper markdown formatting
+
+Error Handling:
+- If scraping fails for some URLs, work with the available content
+- If no relevant URLs are found, ask the user to rephrase their question
+- Always mention when you're working with limited information
+
+Tone and Style:
+- Be conversational but professional
+- Use clear, accessible language
+- Provide actionable insights when possible
+
+Do not answer from your own knowledge; always search the web, scrape the content, and cite sources.`,
         maxSteps: 10,
         onFinish: async ({ response }) => {
           // Merge messages and save to DB
@@ -251,8 +274,23 @@ Do not answer from your own knowledge; always search the web and cite sources.`,
       result.mergeIntoDataStream(dataStream);
     },
     onError: (e: unknown) => {
-      console.error(e);
-      return "Oops, an error occured!";
+      console.error("Chat API Error:", e);
+
+      // Provide more specific error messages based on the error type
+      if (e instanceof Error) {
+        if (e.message.includes("rate limit") || e.message.includes("429")) {
+          return "Rate limit exceeded. Please wait a moment and try again.";
+        }
+        if (e.message.includes("network") || e.message.includes("fetch")) {
+          return "Network error. Please check your connection and try again.";
+        }
+        if (e.message.includes("timeout")) {
+          return "Request timed out. Please try again.";
+        }
+        return `An error occurred: ${e.message}`;
+      }
+
+      return "An unexpected error occurred. Please try again.";
     },
   });
 }

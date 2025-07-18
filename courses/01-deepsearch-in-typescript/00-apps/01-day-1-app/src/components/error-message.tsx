@@ -7,7 +7,7 @@ interface ErrorMessageProps {
 export const ErrorMessage = ({ message }: ErrorMessageProps) => {
   return (
     <div className="mx-auto w-full max-w-[65ch]">
-      <div className="flex items-center gap-2 rounded-md bg-red-950 p-3 text-sm text-red-300">
+      <div className="flex items-center gap-2 rounded-md border border-red-800 bg-red-950 p-3 text-sm text-red-300 shadow-lg">
         <AlertCircle className="size-5 shrink-0" />
         {message}
       </div>
