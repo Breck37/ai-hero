@@ -163,13 +163,14 @@ export async function POST(request: Request) {
                   return "Source";
                 }
               }
-              return results.organic.map((result) => ({
+              const mappedResults = results.organic.map((result) => ({
                 title: result.title,
                 link: result.link,
                 snippet: result.snippet,
                 source: getSiteName(result.title, result.link),
                 siteName: getSiteName(result.title, result.link),
               }));
+              return mappedResults;
             },
           },
           scrapePages: {
@@ -177,7 +178,7 @@ export async function POST(request: Request) {
               urls: z
                 .array(z.string())
                 .describe(
-                  "Array of URLs to scrape and extract full content from",
+                  "Array of URLs to scrape and extract full content from. This tool provides the complete article content, not just snippets. Pass the URLs exactly as they appear in the 'link' field from search results. Example: ['https://example.com/article1', 'https://example.com/article2']",
                 ),
             }),
             execute: async ({ urls }, { abortSignal: _abortSignal }) => {
@@ -204,15 +205,26 @@ export async function POST(request: Request) {
             },
           },
         },
-        system: `You are an AI assistant with access to web search and web scraping tools. 
+        system: `CRITICAL: You MUST use BOTH searchWeb AND scrapePages tools for EVERY question. Never skip the scraping step.
 
-ALWAYS follow this workflow:
-1. Use the searchWeb tool to find relevant URLs for the user's question
-2. ALWAYS use the scrapePages tool to extract the full content from the most relevant URLs found in step 1
-3. Analyze the scraped content to provide detailed, comprehensive answers
-4. Always cite your sources with inline markdown links using the source URLs
+You are an AI assistant with access to web search and web scraping tools. 
 
-IMPORTANT: Never rely solely on search snippets. ALWAYS scrape the full content of relevant pages to provide the most accurate and detailed answers possible.
+MANDATORY WORKFLOW - YOU MUST FOLLOW THIS EXACTLY:
+1. FIRST: Use the searchWeb tool to find relevant URLs for the user's question
+2. SECOND: Extract the 'link' URLs from the search results (you will see them in the response)
+3. THIRD: You MUST use the scrapePages tool with those extracted URLs to get full content
+4. FOURTH: Analyze the scraped content to provide detailed, comprehensive answers
+5. FIFTH: Always cite your sources with inline markdown links using the source URLs
+
+CRITICAL RULE: You are FORBIDDEN from providing answers based only on search snippets. You MUST ALWAYS scrape the full content of relevant pages. Search snippets are insufficient for providing accurate answers.
+
+TOOL USAGE INSTRUCTIONS:
+- After using searchWeb, you will receive search results with 'link' fields
+- You MUST extract these 'link' URLs and pass them to the scrapePages tool
+- Do NOT try to answer the question until you have scraped the full content
+- The scrapePages tool will give you the complete article text, not just snippets
+
+MANDATORY: After every searchWeb call, you MUST immediately call scrapePages with the URLs from the search results. This is not optional.
 
 URL Selection Strategy:
 - Prioritize URLs that appear most relevant to the user's specific question
@@ -240,8 +252,17 @@ Tone and Style:
 - Use clear, accessible language
 - Provide actionable insights when possible
 
-Do not answer from your own knowledge; always search the web, scrape the content, and cite sources.`,
-        maxSteps: 10,
+REMEMBER: You MUST use both searchWeb AND scrapePages tools for every question. Never skip the scraping step.
+
+EXAMPLE WORKFLOW:
+User asks: "What are the latest developments in AI?"
+1. Use searchWeb with query: "latest developments in AI 2024"
+2. Look at the search results and extract the 'link' field from each result
+3. Use scrapePages with those extracted links (e.g., ["https://example1.com", "https://example2.com"])
+4. Analyze the scraped content and provide comprehensive answer with citations
+
+IMPORTANT: The searchWeb tool returns results with 'link' fields. You MUST extract these links and pass them to scrapePages.`,
+        maxSteps: 20,
         onFinish: async ({ response }) => {
           // Merge messages and save to DB
           const updatedMessages = appendResponseMessages({
