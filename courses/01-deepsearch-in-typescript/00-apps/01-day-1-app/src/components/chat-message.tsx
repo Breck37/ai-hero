@@ -66,15 +66,21 @@ function ToolInvocationPart({
       return (
         <div className="mt-1 flex flex-col gap-2">
           {result.map((item, i) => (
-            <a
-              key={i}
-              href={item.link || item.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-purple-400 underline hover:text-blue-300"
-            >
-              {item.title}
-            </a>
+            <div key={i} className="flex flex-col">
+              <a
+                href={item.link || item.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-purple-400 underline hover:text-blue-300"
+              >
+                {item.title}
+              </a>
+              {item.date && (
+                <span className="mt-1 text-xs text-gray-400">
+                  Published: {item.date}
+                </span>
+              )}
+            </div>
           ))}
         </div>
       );

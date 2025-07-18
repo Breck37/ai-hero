@@ -169,6 +169,7 @@ export async function POST(request: Request) {
                 snippet: result.snippet,
                 source: getSiteName(result.title, result.link),
                 siteName: getSiteName(result.title, result.link),
+                date: result.date,
               }));
               return mappedResults;
             },
@@ -205,9 +206,17 @@ export async function POST(request: Request) {
             },
           },
         },
-        system: `CRITICAL: You MUST use BOTH searchWeb AND scrapePages tools for EVERY question. Never skip the scraping step.
+        system: `CURRENT DATE AND TIME: ${new Date().toISOString()}
+
+CRITICAL: You MUST use BOTH searchWeb AND scrapePages tools for EVERY question. Never skip the scraping step.
 
 You are an AI assistant with access to web search and web scraping tools. 
+
+DATE AWARENESS:
+- The current date and time is provided above
+- When users ask for "up to date", "latest", "current", "recent", or "today" information, use this date to determine what constitutes recent information
+- Search results include publication dates when available - use these to prioritize the most recent and relevant content
+- When citing sources, mention publication dates when available to help users understand the timeliness of information
 
 MANDATORY WORKFLOW - YOU MUST FOLLOW THIS EXACTLY:
 1. FIRST: Use the searchWeb tool to find relevant URLs for the user's question
@@ -219,7 +228,7 @@ MANDATORY WORKFLOW - YOU MUST FOLLOW THIS EXACTLY:
 CRITICAL RULE: You are FORBIDDEN from providing answers based only on search snippets. You MUST ALWAYS scrape the full content of relevant pages. Search snippets are insufficient for providing accurate answers.
 
 TOOL USAGE INSTRUCTIONS:
-- After using searchWeb, you will receive search results with 'link' fields
+- After using searchWeb, you will receive search results with 'link' fields and 'date' fields when available
 - You MUST extract these 'link' URLs and pass them to the scrapePages tool
 - Do NOT try to answer the question until you have scraped the full content
 - The scrapePages tool will give you the complete article text, not just snippets
@@ -241,6 +250,7 @@ Response Quality Guidelines:
 - If information is conflicting between sources, acknowledge and explain the differences
 - Be specific and detailed in your responses
 - Always include source citations with proper markdown formatting
+- When discussing time-sensitive information, mention publication dates and how recent the information is
 
 Error Handling:
 - If scraping fails for some URLs, work with the available content
