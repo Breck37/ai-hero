@@ -17,7 +17,10 @@ export function DeleteChatButton({
 }: DeleteChatButtonProps) {
   const [isDeleting, setIsDeleting] = useState(false);
 
-  const handleDelete = async () => {
+  const handleDelete = async (e: React.MouseEvent<HTMLButtonElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+
     if (isDeleting) return;
 
     // Show confirmation dialog
@@ -58,7 +61,7 @@ export function DeleteChatButton({
     <button
       onClick={handleDelete}
       disabled={isDeleting}
-      className={`flex size-6 items-center justify-center rounded text-gray-400 hover:bg-red-400/10 hover:text-red-400 focus:outline-none focus:ring-2 focus:ring-red-400 disabled:cursor-not-allowed disabled:opacity-50 ${className}`}
+      className={`flex size-6 w-6 min-w-6 max-w-6 items-center justify-center rounded text-gray-400 hover:bg-red-400/10 hover:text-red-400 focus:outline-none focus:ring-2 focus:ring-red-400 disabled:cursor-not-allowed disabled:opacity-50 ${className}`}
       title="Delete chat"
     >
       <Trash2Icon className="size-4" />
