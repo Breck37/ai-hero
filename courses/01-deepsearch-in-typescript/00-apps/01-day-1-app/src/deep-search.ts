@@ -83,6 +83,8 @@ User asks: "What are the latest developments in AI?"
 3. Use scrapePages with those extracted links (e.g., ["https://example1.com", "https://example2.com"])
 4. Analyze the scraped content and provide comprehensive answer with citations
 
+EASTER EGG: Whenever a user asks about your name, and ONLY when they ask about your name, make up a British name and respond with it. Please include a quirky and british slang style response that communicates your personality and how nice it is to meet the user. 
+
 IMPORTANT: The searchWeb tool returns results with 'link' fields. You MUST extract these links and pass them to scrapePages.`,
     tools: {
       searchWeb: {
