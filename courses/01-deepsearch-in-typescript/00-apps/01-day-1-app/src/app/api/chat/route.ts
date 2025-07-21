@@ -45,22 +45,53 @@ export async function POST(request: Request) {
     return new Response("Unauthorized", { status: 401 });
   }
 
+  // Create Langfuse trace early - we'll update the sessionId later
+  const trace = langfuse.trace({
+    name: "chat",
+    userId: session.user.id,
+  });
+
   const userId = session.user.id;
+
   // Fetch user to check admin status
+  const userSpan = trace.span({
+    name: "fetch-user",
+    input: { userId },
+  });
+
   const user = await db.query.users.findFirst({ where: eq(users.id, userId) });
+
+  userSpan.end({
+    output: {
+      userFound: !!user,
+      isAdmin: user?.isAdmin ?? false,
+    },
+  });
+
   if (!user) {
     return new Response("Unauthorized", { status: 401 });
   }
   const isAdmin = user.isAdmin;
 
   // Use the reusable rate limit hook
+  const rateLimitSpan = trace.span({
+    name: "check-rate-limit",
+    input: { userId, endpoint: "chat", isAdmin, maxRequestsPerDay: 100 },
+  });
+
   const { allowed, error: rateLimitError } = await checkAndRecordRateLimit({
     db,
     userId,
     endpoint: "chat",
     isAdmin,
     maxRequestsPerDay: 100,
+    trace,
   });
+
+  rateLimitSpan.end({
+    output: { allowed, error: rateLimitError },
+  });
+
   if (!allowed) {
     return new Response(rateLimitError || "Too Many Requests", { status: 429 });
   }
@@ -96,6 +127,18 @@ export async function POST(request: Request) {
   let currentChatId = chatId;
   if (isNewChat) {
     currentChatId = randomUUID();
+
+    const upsertChatSpan = trace.span({
+      name: "upsert-chat-initial",
+      input: {
+        userId,
+        chatId: currentChatId,
+        title: chatTitle,
+        messageCount: body.messages.length,
+        isNewChat: true,
+      },
+    });
+
     await upsertChat({
       userId,
       chatId: currentChatId,
@@ -105,14 +148,17 @@ export async function POST(request: Request) {
         parts: m.parts ?? [],
         order: i,
       })),
+      trace,
+    });
+
+    upsertChatSpan.end({
+      output: { success: true, chatId: currentChatId },
     });
   }
 
-  // Create Langfuse trace with user and session
-  const trace = langfuse.trace({
+  // Update trace with sessionId now that we have the chatId
+  trace.update({
     sessionId: currentChatId,
-    name: "chat",
-    userId: session.user.id,
   });
 
   return createDataStreamResponse({
@@ -279,6 +325,18 @@ IMPORTANT: The searchWeb tool returns results with 'link' fields. You MUST extra
             messages: body.messages,
             responseMessages: response.messages,
           });
+
+          const finalUpsertSpan = trace.span({
+            name: "upsert-chat-final",
+            input: {
+              userId,
+              chatId: currentChatId,
+              title: chatTitle,
+              messageCount: updatedMessages.length,
+              isNewChat: false,
+            },
+          });
+
           await upsertChat({
             userId,
             chatId: currentChatId,
@@ -288,6 +346,11 @@ IMPORTANT: The searchWeb tool returns results with 'link' fields. You MUST extra
               parts: m.parts ?? [],
               order: i,
             })),
+            trace,
+          });
+
+          finalUpsertSpan.end({
+            output: { success: true, chatId: currentChatId },
           });
 
           // Flush the trace to Langfuse
