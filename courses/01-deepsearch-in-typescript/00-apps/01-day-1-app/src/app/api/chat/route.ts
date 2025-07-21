@@ -74,7 +74,7 @@ export async function POST(request: Request) {
   // Global rate limiting for LLM calls
   const globalRateLimitConfig = {
     maxRequests: 1, // For testing: only 1 request
-    windowMs: 5_000, // For testing: 5 second window
+    windowMs: 20_000, // For testing: 5 second window
     keyPrefix: "global_llm",
     maxRetries: 3,
   };
