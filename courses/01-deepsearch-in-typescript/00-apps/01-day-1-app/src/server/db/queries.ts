@@ -139,3 +139,44 @@ export const getChats = async (opts: { userId: string }) => {
     orderBy: [desc(chats.updatedAt)],
   });
 };
+
+export const deleteChat = async (opts: {
+  userId: string;
+  chatId: string;
+  trace?: any; // Langfuse trace object for spans
+}) => {
+  // Verify chat exists and belongs to user
+  const verifyChatSpan = opts.trace?.span({
+    name: "verify-chat-ownership",
+    input: { userId: opts.userId, chatId: opts.chatId },
+  });
+
+  const existingChat = await db.query.chats.findFirst({
+    where: and(eq(chats.id, opts.chatId), eq(chats.userId, opts.userId)),
+  });
+
+  verifyChatSpan?.end({
+    output: {
+      chatFound: !!existingChat,
+      belongsToUser: existingChat?.userId === opts.userId,
+    },
+  });
+
+  if (!existingChat) {
+    throw new Error("Chat not found or does not belong to user");
+  }
+
+  // Delete the chat (messages will be deleted automatically due to CASCADE)
+  const deleteChatSpan = opts.trace?.span({
+    name: "delete-chat",
+    input: { chatId: opts.chatId, userId: opts.userId },
+  });
+
+  await db.delete(chats).where(eq(chats.id, opts.chatId));
+
+  deleteChatSpan?.end({
+    output: { success: true },
+  });
+
+  return { success: true };
+};
