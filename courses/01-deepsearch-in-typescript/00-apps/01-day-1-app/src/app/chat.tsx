@@ -67,8 +67,9 @@ export const ChatPage = ({
       console.log("New chat created, updating URL:", lastDataItem.chatId);
       hasRedirected.current = true;
 
-      // Update URL without causing a component re-render
-      router.replace(`?id=${lastDataItem.chatId}`, { scroll: false });
+      // Update URL without causing a component re-render by directly manipulating history
+      const newUrl = `${window.location.pathname}?id=${lastDataItem.chatId}`;
+      window.history.replaceState({}, "", newUrl);
     }
   }, [data, router]);
 

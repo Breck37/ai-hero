@@ -96,6 +96,7 @@ export default async function HomePage({
       </div>
 
       <ChatPage
+        key={chatIdFromUrl || "new-chat"}
         userName={userName}
         isAuthenticated={isAuthenticated}
         chatId={chatId}
