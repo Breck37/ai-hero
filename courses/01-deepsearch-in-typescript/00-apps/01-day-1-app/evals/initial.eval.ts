@@ -4,6 +4,7 @@ import type { Message } from "ai";
 import { generateObject } from "ai";
 import { z } from "zod";
 import { factualityModel } from "../model";
+import { getEvaliteDataset } from "./utils";
 
 // Simple in-memory cache for factuality checks
 const factualityCache = new Map<string, any>();
@@ -161,83 +162,7 @@ const HasCodeBlocks = createScorer<Message[], string, string>({
 
 evalite("Deep Search Eval", {
   data: async (): Promise<{ input: Message[]; expected: string }[]> => {
-    return [
-      {
-        input: [
-          {
-            id: "1",
-            role: "user",
-            content: "What is the latest version of TypeScript?",
-          },
-        ],
-        expected: "The current TypeScript version is 5.8",
-      },
-      {
-        input: [
-          {
-            id: "2",
-            role: "user",
-            content: "What are the main features of Next.js 15?",
-          },
-        ],
-        expected: `
-Next.js 15 introduces several new features and improvements. Here's a summary of the key highlights:
-
-1. React 19 Support:
-
-Next.js 15 offers full support for React 19, including new hooks like useActionState, useFormStatus, and useOptimistic. (https://nextjs.org/blog/next-15, https://dev.to/dimeloper/whats-new-in-nextjs-15-new-hooks-turbopack-and-more-2lo8)
-The App Router uses React 19 RC, while the Pages Router maintains backward compatibility with React 18. (https://nextjs.org/blog/next-15)
-Experimental support for the React Compiler is included. (https://nextjs.org/blog/next-15)
-Improved hydration error view with source code and suggestions. (https://nextjs.org/blog/next-15)
-2. Caching Improvements:
-
-GET Route Handlers and Client Router Cache no longer cache by default. You can opt-in to caching using static route config. (https://nextjs.org/blog/next-15, https://dev.to/dimeloper/whats-new-in-nextjs-15-new-hooks-turbopack-and-more-2lo8)
-3. Turbopack:
-
-Turbopack dev is now stable (next dev --turbo). (https://nextjs.org/blog/next-15, https://dev.to/dimeloper/whats-new-in-nextjs-15-new-hooks-turbopack-and-more-2lo8)
-Alpha release of next build --turbopack for faster production builds. (https://nextjs.org/blog/next-15-3)
-Turbopack configuration moved to the top-level turbopack key in next.config.ts. (https://nextjs.org/blog/next-15-3)
-In Next.js 15.4, next build --turbopack passes all integration tests. (https://nextjs.org/blog/next-15-4)
-4. New Components and APIs:
-
-<Form> component for enhanced HTML forms with client-side navigation. (https://nextjs.org/blog/next-15, https://dev.to/dimeloper/whats-new-in-nextjs-15-new-hooks-turbopack-and-more-2lo8)
-unstable_after API (Experimental) to execute code after a response finishes streaming. (https://nextjs.org/blog/next-15)
-instrumentation.js API (Stable) for server lifecycle observability. (https://nextjs.org/blog/next-15)
-Client Instrumentation Hook using instrumentation-client.js|ts for early monitoring and analytics setup. (https://nextjs.org/blog/next-15-3)
-Navigation hooks: onNavigate and useLinkStatus for controlling routing. (https://nextjs.org/blog/next-15-3)
-5. Development and Build Improvements:
-
-Static Route Indicator during development. (https://nextjs.org/blog/next-15, https://dev.to/dimeloper/whats-new-in-nextjs-15-new-hooks-turbopack-and-more-2lo8)
-Server Components HMR (Hot Module Replacement) improvements. (https://nextjs.org/blog/next-15)
-Faster Static Generation for the App Router. (https://nextjs.org/blog/next-15)
-TypeScript support for next.config.ts. (https://nextjs.org/blog/next-15, https://dev.to/dimeloper/whats-new-in-nextjs-15-new-hooks-turbopack-and-more-2lo8)
-6. Security Enhancements:
-
-Enhanced security for Server Actions with unguessable endpoints and removal of unused actions. (https://nextjs.org/blog/next-15)
-7. Other Changes:
-
-ESLint 9 Support. (https://nextjs.org/blog/next-15, https://dev.to/dimeloper/whats-new-in-nextjs-15-new-hooks-turbopack-and-more-2lo8)
-Improvements for self-hosting, including more control over Cache-Control headers. (https://nextjs.org/blog/next-15)
-Optimizing bundling of external packages (Stable). (https://nextjs.org/blog/next-15)
-Community support for Rspack (experimental). (https://nextjs.org/blog/next-15-3)
-8. Next.js 15.3 Specific Features:
-
-TypeScript plugin performance improvements. (https://nextjs.org/blog/next-15-3)
-9. Next.js 15.4 Specific Features:
-
-Next.js 15.4 includes updates to performance, stability, and Turbopack compatibility. (https://nextjs.org/blog/next-15-4)
-10. Upcoming in Next.js 16 (Preview in 15.4):
-
-Cache Components (Beta). (https://medium.com/@onix_react/whats-new-in-next-js-15-4-20af8a7064b6, https://nextjs.org/blog/next-15-4)
-Turbopack Builds (Beta). (https://medium.com/@onix_react/whats-new-in-next-js-15-4-20af8a7064b6, https://nextjs.org/blog/next-15-4)
-Optimized Client-Side Routing. (https://medium.com/@onix_react/whats-new-in-next-js-15-4-20af8a7064b6, https://nextjs.org/blog/next-15-4)
-DevTools & Debugging. (https://medium.com/@onix_react/whats-new-in-next-js-15-4-20af8a7064b6, https://nextjs.org/blog/next-15-4)
-Node.js Middleware (Stable). (https://medium.com/@onix_react/whats-new-in-next-js-15-4-20af8a7064b6, https://nextjs.org/blog/next-15-4)
-Deployment Adapters (Alpha). (https://medium.com/@onix_react/whats-new-in-next-js-15-4-20af8a7064b6, https://nextjs.org/blog/next-15-4)
-These features collectively aim to improve performance, developer experience, and stability in Next.js applications.
-`,
-      },
-    ];
+    return getEvaliteDataset();
   },
   task: async (input) => {
     return askDeepSearch(input);
@@ -258,6 +183,6 @@ These features collectively aim to improve performance, developer experience, an
     HasCodeBlocks,
     // Comment out Factuality scorer to reduce LLM usage during development
     // Uncomment when you have sufficient quota or want to test factuality
-    // Factuality,
+    Factuality,
   ],
 });

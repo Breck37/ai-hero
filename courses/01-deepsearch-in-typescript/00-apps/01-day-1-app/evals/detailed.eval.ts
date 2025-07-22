@@ -1,6 +1,7 @@
 import { evalite, createScorer } from "evalite";
 import { askDeepSearch } from "~/deep-search";
 import type { Message } from "ai";
+import { getEvaliteDatasetWithNames } from "./utils";
 
 // Enhanced scorers with detailed logging
 const DetailedScorers = {
@@ -191,43 +192,18 @@ const DetailedScorers = {
   }),
 };
 
-// Test data with more descriptive names - reduced for faster evaluation
-const testData: { input: Message[]; expected: string; name: string }[] = [
-  {
-    name: "TypeScript Version Query",
-    input: [
-      {
-        id: "1",
-        role: "user" as const,
-        content: "What is the latest version of TypeScript?",
-      },
-    ],
-    expected: "The latest stable version of TypeScript is 5.8.3",
-  },
-  {
-    name: "React TypeScript Setup Query",
-    input: [
-      {
-        id: "2",
-        role: "user" as const,
-        content: "How do I set up a React project with TypeScript?",
-      },
-    ],
-    expected: "Use create-react-app with TypeScript template or Vite",
-  },
-];
-
 // Enhanced evaluation with detailed logging
 evalite("Detailed Deep Search Eval", {
-  data: async () => testData,
+  data: async () => getEvaliteDatasetWithNames(),
   task: async (input: Message[]) => {
-    // Get the current test case index from the data
-    const currentIndex = testData.findIndex(
+    // Get the current test case from the dataset
+    const dataset = getEvaliteDatasetWithNames();
+    const currentIndex = dataset.findIndex(
       (t) => t.input[0]?.content === input[0]?.content,
     );
 
     if (currentIndex >= 0) {
-      const testCase = testData[currentIndex];
+      const testCase = dataset[currentIndex];
       console.log(`\n🔍 Running test: ${testCase?.name || "Unknown"}`);
       console.log(`   Question: "${testCase?.input[0]?.content || "Unknown"}"`);
     } else {

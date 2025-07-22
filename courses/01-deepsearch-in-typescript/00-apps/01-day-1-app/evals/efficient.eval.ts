@@ -1,6 +1,7 @@
 import { evalite, createScorer } from "evalite";
 import { askDeepSearch } from "~/deep-search";
 import type { Message } from "ai";
+import { getEvaliteDataset } from "./utils";
 
 // Deterministic scorers that don't require LLM calls
 const DeterministicScorers = {
@@ -106,44 +107,9 @@ const DeterministicScorers = {
   }),
 };
 
-// Test data focused on common scenarios
-const testData: { input: Message[]; expected: string }[] = [
-  {
-    input: [
-      {
-        id: "1",
-        role: "user" as const,
-        content: "What is the latest version of TypeScript?",
-      },
-    ],
-    expected: "The current TypeScript version is 5.8",
-  },
-  {
-    input: [
-      {
-        id: "2",
-        role: "user" as const,
-        content: "What are the main features of Next.js 15?",
-      },
-    ],
-    expected:
-      "Next.js 15 introduces React 19 support and Turbopack improvements",
-  },
-  {
-    input: [
-      {
-        id: "3",
-        role: "user" as const,
-        content: "How do I set up a React project with TypeScript?",
-      },
-    ],
-    expected: "Use create-react-app with TypeScript template or Vite",
-  },
-];
-
 // Efficient evaluation that minimizes LLM usage
 evalite("Efficient Deep Search Eval", {
-  data: async () => testData,
+  data: async () => getEvaliteDataset(),
   task: async (input) => {
     return askDeepSearch(input);
   },
