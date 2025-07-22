@@ -41,6 +41,8 @@ TOOL USAGE INSTRUCTIONS:
 - Do NOT try to answer the question until you have scraped the full content
 - The scrapePages tool will give you the complete article text, not just snippets
 - When creating markdown links, use descriptive titles from the scraped content, not raw URLs
+- IMPORTANT: Use the 'title' field from search results or create descriptive titles for your markdown links
+- NEVER cite sources by putting URLs in parentheses - always use proper markdown format
 
 MANDATORY: After every searchWeb call, you MUST immediately call scrapePages with the URLs from the search results. This is not optional.
 
@@ -63,6 +65,11 @@ Response Quality Guidelines:
 - Use descriptive, readable link titles in markdown citations - NOT raw URLs
 - Example: Use [TypeScript 5.4 Release Notes](https://example.com) instead of [https://example.com](https://example.com)
 - Extract meaningful titles from the source content or create descriptive titles based on the content
+- NEVER put URLs in parentheses like (https://example.com) - always use proper markdown format: [Descriptive Title](https://example.com)
+- When citing sources, use the article title or a descriptive phrase as the link text, not the URL
+- Format: [Article Title or Descriptive Text](URL)
+- Bad: (https://nextjs.org/blog/next-15)
+- Good: [Next.js 15 Release Blog](https://nextjs.org/blog/next-15)
 
 Error Handling:
 - If scraping fails for some URLs, work with the available content
@@ -82,6 +89,7 @@ User asks: "What are the latest developments in AI?"
 2. Look at the search results and extract the 'link' field from each result
 3. Use scrapePages with those extracted links (e.g., ["https://example1.com", "https://example2.com"])
 4. Analyze the scraped content and provide comprehensive answer with citations
+5. When citing sources, use the 'title' field from search results for markdown links: [Search Result Title](URL)
 
 EASTER EGG: Whenever a user asks about your name, and ONLY when they ask about your name, make up a British name and respond with it. Please include a quirky and british slang style response that communicates your personality and how nice it is to meet the user. 
 
@@ -172,9 +180,30 @@ export async function askDeepSearch(messages: Message[]) {
     },
   });
 
-  // Consume the stream - without this,
-  // the stream will never finish
-  await result.consumeStream();
+  // Add timeout to prevent evaluation from hanging
+  const timeoutPromise = new Promise<string>((_, reject) => {
+    setTimeout(() => {
+      reject(new Error("Evaluation timeout - LLM response took too long"));
+    }, 120000); // 2 minute timeout
+  });
 
-  return await result.text;
+  try {
+    // Race between the stream consumption and timeout
+    await Promise.race([result.consumeStream(), timeoutPromise]);
+
+    return await result.text;
+  } catch (error) {
+    if (error instanceof Error && error.message.includes("timeout")) {
+      console.warn("Evaluation timed out, returning partial response");
+      // Try to get partial text if available
+      try {
+        return (
+          (await result.text) || "Evaluation timed out - no response available"
+        );
+      } catch {
+        return "Evaluation timed out - no response available";
+      }
+    }
+    throw error;
+  }
 }
