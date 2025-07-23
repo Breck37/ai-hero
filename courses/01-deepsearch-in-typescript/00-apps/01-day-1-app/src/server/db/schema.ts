@@ -39,6 +39,7 @@ export const users = createTable("user", {
 
 export const usersRelations = relations(users, ({ many }) => ({
   accounts: many(accounts),
+  requests: many(userRequests),
 }));
 
 export const accounts = createTable(
@@ -112,6 +113,37 @@ export const verificationTokens = createTable(
   }),
 );
 
+export const userRequests = createTable(
+  "user_requests",
+  {
+    id: varchar("id", { length: 255 })
+      .notNull()
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    userId: varchar("user_id", { length: 255 })
+      .notNull()
+      .references(() => users.id),
+    createdAt: timestamp("created_at", {
+      mode: "date",
+      withTimezone: true,
+    })
+      .notNull()
+      .default(sql`CURRENT_TIMESTAMP`),
+    requestType: varchar("request_type", { length: 255 }).notNull(), // e.g., "chat", "search"
+    useSearchGrounding: boolean("use_search_grounding")
+      .notNull()
+      .default(false),
+  },
+  (request) => ({
+    userIdIdx: index("user_request_user_id_idx").on(request.userId),
+    createdAtIdx: index("user_request_created_at_idx").on(request.createdAt),
+  }),
+);
+
+export const userRequestsRelations = relations(userRequests, ({ one }) => ({
+  user: one(users, { fields: [userRequests.userId], references: [users.id] }),
+}));
+
 export declare namespace DB {
   export type User = InferSelectModel<typeof users>;
   export type NewUser = InferInsertModel<typeof users>;
@@ -126,4 +158,7 @@ export declare namespace DB {
   export type NewVerificationToken = InferInsertModel<
     typeof verificationTokens
   >;
+
+  export type UserRequest = InferSelectModel<typeof userRequests>;
+  export type NewUserRequest = InferInsertModel<typeof userRequests>;
 }

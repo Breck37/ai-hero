@@ -4,6 +4,11 @@ import { z } from "zod";
 import { model, modelWithSearchGrounding } from "@/model";
 import { auth } from "~/server/auth";
 import { searchSerper } from "~/serper";
+import {
+  checkRateLimit,
+  recordRequest,
+  isUserAdmin,
+} from "~/server/db/queries";
 
 export const maxDuration = 60;
 
@@ -19,10 +24,44 @@ export async function POST(request: Request) {
     useSearchGrounding?: boolean;
   };
 
+  const { messages, useSearchGrounding = false } = body;
+  const userId = session.user.id;
+
+  // Check if user is admin (admins bypass rate limits)
+  const isAdmin = await isUserAdmin(userId);
+
+  if (!isAdmin) {
+    // Check rate limit for non-admin users
+    const rateLimitCheck = await checkRateLimit(userId);
+
+    if (!rateLimitCheck.allowed) {
+      return new Response(
+        JSON.stringify({
+          error: "Rate limit exceeded",
+          message: `You have exceeded your daily limit of ${rateLimitCheck.limit} requests. You have made ${rateLimitCheck.currentCount} requests today.`,
+          currentCount: rateLimitCheck.currentCount,
+          limit: rateLimitCheck.limit,
+        }),
+        {
+          status: 429,
+          headers: {
+            "Content-Type": "application/json",
+            "X-RateLimit-Limit": rateLimitCheck.limit.toString(),
+            "X-RateLimit-Remaining": "0",
+            "X-RateLimit-Reset": new Date(
+              Date.now() + 24 * 60 * 60 * 1000,
+            ).toISOString(),
+          },
+        },
+      );
+    }
+  }
+
+  // Record the request before processing
+  await recordRequest(userId, "chat", useSearchGrounding);
+
   return createDataStreamResponse({
     execute: async (dataStream) => {
-      const { messages, useSearchGrounding = false } = body;
-
       if (useSearchGrounding) {
         // Use search grounding (native model search)
         const result = streamText({
