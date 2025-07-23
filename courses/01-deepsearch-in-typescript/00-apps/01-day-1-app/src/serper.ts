@@ -1,4 +1,5 @@
 import { cacheWithRedis } from "~/server/redis/redis";
+import { env } from "~/env.js";
 
 export declare namespace SerperTool {
   export type SearchInput = {
@@ -62,14 +63,10 @@ const fetchFromSerper = cacheWithRedis(
     url: string,
     options: Omit<RequestInit, "headers"> & { signal: AbortSignal | undefined },
   ): Promise<SerperTool.SearchResult> => {
-    if (!process.env.SERPER_API_KEY) {
-      throw new Error("SERPER_API_KEY is not set in .env");
-    }
-
     const response = await fetch(`https://google.serper.dev${url}`, {
       ...options,
       headers: {
-        "X-API-KEY": process.env.SERPER_API_KEY,
+        "X-API-KEY": env.SERPER_API_KEY,
         "Content-Type": "application/json",
       },
       signal: options.signal,
@@ -79,7 +76,7 @@ const fetchFromSerper = cacheWithRedis(
       throw new Error(await response.text());
     }
 
-    const json = await response.json();
+    const json = (await response.json()) as SerperTool.SearchResult;
 
     return json;
   },
@@ -88,7 +85,7 @@ const fetchFromSerper = cacheWithRedis(
 export const searchSerper = async (
   body: SerperTool.SearchInput,
   signal: AbortSignal | undefined,
-) => {
+): Promise<SerperTool.SearchResult> => {
   const results = await fetchFromSerper(`/search`, {
     method: "POST",
     body: JSON.stringify(body),
