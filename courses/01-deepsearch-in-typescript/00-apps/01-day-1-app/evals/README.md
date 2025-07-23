@@ -1,171 +1,203 @@
-# Efficient Evaluation Setup
+# Evaluation Setup
 
-This directory contains optimized evaluation configurations to minimize LLM usage and costs while still providing meaningful feedback on your application's performance.
+This directory contains evaluation configurations for testing the deep search application with different models and datasets.
 
 ## 🎯 Quick Reference
 
-| Command                    | Cost          | Use Case          | Terminal Output    |
-| -------------------------- | ------------- | ----------------- | ------------------ |
-| `pnpm run evals:detailed`  | **Low**       | Daily development | ✅ Rich & detailed |
-| `pnpm run evals:efficient` | **Low**       | Quick testing     | ⚠️ Basic           |
-| `pnpm run evals:initial`   | **High**      | Release testing   | ⚠️ Basic           |
-| `pnpm run evals`           | **Very High** | All evaluations   | ⚠️ Basic           |
-
-**💡 Recommendation**: Use `pnpm run evals:detailed` for daily development - it provides the best feedback without LLM costs!
+| Command                    | Cost     | Use Case         | Description                     |
+| -------------------------- | -------- | ---------------- | ------------------------------- |
+| `pnpm run evals:main`      | **High** | Main evaluation  | Factuality + AnswerRelevancy    |
+| `pnpm run evals:google`    | **High** | Google models    | Main eval with Google models    |
+| `pnpm run evals:openai`    | **High** | OpenAI models    | Main eval with OpenAI models    |
+| `pnpm run evals:anthropic` | **High** | Anthropic models | Main eval with Anthropic models |
+| `pnpm run evals:mistral`   | **High** | Mistral models   | Main eval with Mistral models   |
+| `pnpm run test-models`     | **Low**  | Model testing    | Basic "Hi" test for all models  |
 
 ## 🚀 Quick Start
 
-### Running Specific Evaluations
+### Main Evaluation (Factuality + AnswerRelevancy)
 
-**⚠️ Important**: Running `pnpm run evals` will execute ALL evaluation files, which can be expensive. Use specific commands instead:
+The main evaluation uses two LLM-based scorers:
 
-#### For Development (Low Cost - No LLM Calls)
-
-```bash
-# Efficient evaluation with detailed terminal output
-pnpm run evals:detailed
-
-# Or basic efficient evaluation
-pnpm run evals:efficient
-```
-
-#### For Production Testing (Higher Cost - Includes LLM Calls)
+- **Factuality**: Compares answers against ground truth
+- **AnswerRelevancy**: Evaluates how relevant each part of the answer is to the question
 
 ```bash
-# Initial evaluation with factuality scorer (expensive)
-pnpm run evals:initial
+# Run main eval with current model
+pnpm run evals:main
+
+# Run main eval with specific model providers
+pnpm run evals:google
+pnpm run evals:openai
+pnpm run evals:anthropic
+pnpm run evals:mistral
 ```
 
-#### Run All Evaluations (Use with caution)
+### Basic Model Testing
+
+Test all available models with a simple "Hi" message:
 
 ```bash
-# This runs ALL evaluation files - can be expensive!
-pnpm run evals
+pnpm run test-models
 ```
 
-## 📊 Evaluation Files
+This test will not fail if any models fail - it's designed to verify which models are working.
 
-### `detailed.eval.ts` (Recommended for Development)
+## 📊 Dataset Structure
 
-- **Cost**: Very low (no LLM calls for scoring)
-- **Speed**: Fast
-- **Scorers**: 6 deterministic scorers
-- **Terminal Output**: Rich, detailed feedback with emojis and metrics
-- **Use case**: Daily development, detailed analysis
-- **Command**: `pnpm run evals:detailed`
+The evaluation uses different datasets based on the `EVAL_DATASET` environment variable:
 
-### `efficient.eval.ts` (Basic)
+### Development Dataset (Default)
 
-- **Cost**: Very low (no LLM calls for scoring)
-- **Speed**: Fast
-- **Scorers**: 6 deterministic scorers
-- **Terminal Output**: Basic
-- **Use case**: Quick testing, CI/CD
-- **Command**: `pnpm run evals:efficient`
+- **2 simple questions** for development testing
+- Questions about Next.js 15 features and TypeScript version
+- Use case: Quick development feedback
 
-### `initial.eval.ts` (Comprehensive - Expensive)
+### CI Dataset (`EVAL_DATASET=ci`)
 
-- **Cost**: Medium (includes factuality scorer with LLM calls)
-- **Speed**: Slower due to LLM calls
-- **Scorers**: 4 deterministic + 1 LLM-based
-- **Use case**: Release testing, comprehensive evaluation
-- **Command**: `pnpm run evals:initial`
+- **2 medium complexity questions** for CI testing
+- Questions about Vercel deployment and TypeScript configuration
+- Use case: Continuous integration testing
 
-## 🎯 Deterministic Scorers
+### Regression Dataset (`EVAL_DATASET=regression`)
 
-These scorers don't require LLM calls and provide immediate feedback:
+- **2 complex questions** for comprehensive testing
+- Questions about React/Next.js compatibility and Turbopack architecture
+- Use case: Comprehensive regression testing
 
-1. **Contains Links** - Checks for markdown links
-2. **Response Length** - Evaluates appropriate response length
-3. **Source Count** - Counts number of sources cited
-4. **Has Code Blocks** - Checks for code examples
-5. **Link Quality** - Evaluates descriptive link titles vs raw URLs
-6. **Response Structure** - Checks formatting and organization
+## 🎯 Scorers
+
+### Main Evaluation Scorers
+
+1. **Factuality** - LLM-based scorer that compares the model's answer against ground truth
+
+   - Uses Google Gemini 1.5 Flash
+   - Returns score 0-1 based on factual accuracy
+   - Includes detailed rationale
+
+2. **AnswerRelevancy** - LLM-based scorer that evaluates answer relevance
+   - Two-step process: statement generation + relevancy evaluation
+   - Uses Google Gemini 1.5 Flash
+   - Returns score 0-1 based on average relevancy of statements
+   - Includes detailed breakdown of statements and verdicts
+
+### Basic Model Test
+
+- **Simple Response Test** - Verifies each model can respond to "Hi"
+- **No LLM scoring** - Just functional testing
+- **Graceful failure** - Continues even if some models fail
 
 ## ⚙️ Configuration
 
-Edit `config.ts` to control evaluation behavior:
+### Environment Variables
 
-```typescript
-export const evalConfig = {
-  enableFactualityScorer: false, // Set to true for comprehensive testing
-  evalRateLimit: {
-    maxRequests: 5, // Max evaluations per minute
-    windowMs: 60_000,
-  },
-  enableCaching: true,
-  enableBatching: true,
-};
+Set `EVAL_DATASET` to control which dataset to use:
+
+```bash
+# Development (default)
+export EVAL_DATASET=dev
+
+# CI testing
+export EVAL_DATASET=ci
+
+# Regression testing
+export EVAL_DATASET=regression
 ```
 
-## 💡 Optimization Strategies
+### API Keys Required
 
-### 1. **Caching**
+The evaluations require API keys for the models being tested:
 
-- Factuality results are cached to avoid duplicate LLM calls
-- Cache persists across evaluation runs
+- `GOOGLE_GENERATIVE_AI_API_KEY` - For Google models
+- `OPENAI_API_KEY` - For OpenAI models
+- `ANTHROPIC_API_KEY` - For Anthropic models
+- `MISTRAL_API_KEY` - For Mistral models
 
-### 2. **Deterministic Scorers**
+## 📁 File Structure
 
-- Use regex and text analysis instead of LLM calls
-- Provide immediate feedback without API costs
+```
+evals/
+├── main.eval.ts              # Main evaluation with Factuality + AnswerRelevancy
+├── basic-model-test.eval.ts  # Basic model functionality test
+├── answer-relevancy.eval.ts  # AnswerRelevancy scorer implementation
+├── initial.eval.ts           # Legacy eval (includes Factuality scorer)
+├── detailed.eval.ts          # Legacy detailed eval
+├── efficient.eval.ts         # Legacy efficient eval
+├── dev.ts                    # Development dataset (2 simple questions)
+├── ci.ts                     # CI dataset (2 medium questions)
+├── regression.ts             # Regression dataset (2 complex questions)
+└── utils.ts                  # Dataset utilities
 
-### 3. **Rate Limiting**
-
-- Built-in rate limiting for evaluation LLM calls
-- Prevents quota exhaustion
-
-### 4. **Batching**
-
-- Process multiple evaluations together when possible
-- Reduces overhead
-
-### 5. **Fallback Behavior**
-
-- Graceful degradation when LLM calls fail
-- Continue evaluation with deterministic scores
-
-## 🔄 Migration Guide
-
-### From `initial.eval.ts` to `efficient-eval.ts`:
-
-1. **Update imports** in your evaluation files
-2. **Use deterministic scorers** for development
-3. **Enable factuality scorer** only for comprehensive testing
-4. **Monitor costs** and adjust configuration as needed
-
-## 📈 Cost Optimization Tips
-
-1. **Use efficient-eval.ts for daily development**
-2. **Enable factuality scorer only for release testing**
-3. **Cache results** to avoid duplicate evaluations
-4. **Set appropriate rate limits** to prevent quota exhaustion
-5. **Use deterministic scorers** for most feedback
-
-## 🛠️ Customization
-
-### Adding New Deterministic Scorers
-
-```typescript
-const CustomScorer = createScorer<Message[], string, string>({
-  name: "Custom Metric",
-  description: "Your custom evaluation logic",
-  scorer: ({ output }) => {
-    // Your deterministic logic here
-    return score; // 0-1 score
-  },
-});
+scripts/
+├── eval-google.ts            # Google model eval script
+├── eval-openai.ts            # OpenAI model eval script
+├── eval-anthropic.ts         # Anthropic model eval script
+├── eval-mistral.ts           # Mistral model eval script
+└── test-models.ts            # Basic model test script
 ```
 
-### Adding New Test Cases
+## 💡 Usage Examples
 
-```typescript
-const testData: { input: Message[]; expected: string }[] = [
-  {
-    input: [{ id: "1", role: "user" as const, content: "Your question" }],
-    expected: "Expected answer",
-  },
-];
+### Development Workflow
+
+```bash
+# Test all models work
+pnpm run test-models
+
+# Run main eval with current model
+pnpm run evals:main
+
+# Run with specific provider
+pnpm run evals:google
 ```
 
-This setup allows you to evaluate your application effectively while keeping costs under control!
+### CI/CD Pipeline
+
+```bash
+# Set CI dataset
+export EVAL_DATASET=ci
+
+# Run evaluation
+pnpm run evals:main
+```
+
+### Comprehensive Testing
+
+```bash
+# Set regression dataset
+export EVAL_DATASET=regression
+
+# Run with all providers
+pnpm run evals:google
+pnpm run evals:openai
+pnpm run evals:anthropic
+pnpm run evals:mistral
+```
+
+## 🔧 Troubleshooting
+
+### Common Issues
+
+1. **API Quota Exceeded**
+
+   - The evaluations use LLM calls which can hit rate limits
+   - Check your API provider's quota and billing
+   - Consider using the basic model test first
+
+2. **Model Not Responding**
+
+   - Run `pnpm run test-models` to verify model connectivity
+   - Check API keys are set correctly
+   - Verify network connectivity
+
+3. **Evaluation Failing**
+   - Check that the required API keys are set
+   - Verify the dataset files exist
+   - Check for TypeScript compilation errors
+
+### Performance Tips
+
+- **Use specific model scripts** instead of the generic `evals:main`
+- **Start with basic model test** to verify connectivity
+- **Monitor API usage** to avoid quota issues
+- **Use development dataset** for quick feedback during development

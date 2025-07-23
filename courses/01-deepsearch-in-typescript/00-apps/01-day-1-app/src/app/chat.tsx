@@ -92,7 +92,7 @@ export const ChatPage = ({
     <>
       <div className="flex flex-1 flex-col">
         {/* Model Switcher Header */}
-        <div className="border-b border-gray-700 bg-gray-900 p-4">
+        <div className="border-b border-gray-700 bg-gray-900 p-3">
           <div className="mx-auto flex max-w-[65ch] items-center justify-between">
             <h1 className="text-lg font-semibold text-gray-200">AI Chat</h1>
             <ModelSwitcher

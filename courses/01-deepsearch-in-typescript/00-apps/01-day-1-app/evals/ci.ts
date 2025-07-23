@@ -1,9 +1,9 @@
 import type { DatasetItem } from "./utils";
 
 export const ciData: DatasetItem[] = [
-  // Additional medium complexity questions for CI testing
+  // Medium complexity questions for CI testing
   {
-    id: "vercel-deployment",
+    id: "vercel-deployment-features",
     name: "Vercel Deployment Features",
     type: "single-hop",
     input:
@@ -43,7 +43,7 @@ export const ciData: DatasetItem[] = [
     description: "Comprehensive overview of Vercel's deployment capabilities",
   },
   {
-    id: "typescript-config",
+    id: "typescript-config-best-practices",
     name: "TypeScript Configuration Best Practices",
     type: "single-hop",
     input:
@@ -98,43 +98,14 @@ export const ciData: DatasetItem[] = [
 
 **Performance Optimizations:**
 - **Incremental:** Reduces compilation time on subsequent builds
-- **Skip Lib Check:** Skips type checking of declaration files
-- **Isolated Modules:** Enables better tree-shaking
+- **Skip Lib Check:** Improves performance by skipping type checking of declaration files
+- **Module Resolution:** "bundler" mode optimizes for modern bundlers like Turbopack
 
-**Next.js 15 Enhancements:**
-- Native TypeScript support in next.config.ts
-- Improved type inference for Server Components
-- Better error messages and type checking
-- Enhanced support for async components`,
+**Framework Integration:**
+- **Next.js Plugin:** Provides enhanced type checking for Next.js features
+- **App Router Support:** Better type inference for App Router patterns
+- **Server Components:** Improved type checking for Server and Client Components`,
     difficulty: "medium",
-    description: "Technical configuration details with practical examples",
-  },
-  // Additional easy questions for broader coverage
-  {
-    id: "supercross-2025",
-    name: "Supercross 2025 SX Results",
-    type: "single-hop",
-    input: "Who has won the most races without winning a championship?",
-    expected: `The rider with the most wins without a championship title is Ken Roczen. He has won over 10 races without winning a championship.`,
-    difficulty: "easy",
-    description: "Simple version lookup requiring current information",
-  },
-  {
-    id: "supercross-all-time-wins",
-    name: "Supercross All-Time Wins",
-    type: "single-hop",
-    input: "Who has won the most races in the history of supercross?",
-    expected: `The rider with the most wins in the history of supercross is Jeremy McGrath with 72 supercross wins.`,
-    difficulty: "easy",
-    description: "Simple version lookup requiring current information",
-  },
-  {
-    id: "MX-goat",
-    name: "MX Goat",
-    type: "single-hop",
-    input: "Who is the goat of supercross?",
-    expected: `The goat of supercross is Ricky Carmichael. He has won 10 championships and over 100 races between supercross and motocross.`,
-    difficulty: "easy",
-    description: "Simple version lookup requiring current information",
+    description: "Detailed TypeScript configuration for Next.js projects",
   },
 ];
