@@ -6,6 +6,18 @@ export type MessagePart = NonNullable<Message["parts"]>[number];
 // Import ToolInvocation type for strong typing
 import type { ToolInvocation } from "ai";
 
+// Define the source type based on the documentation
+type LanguageModelV1Source = {
+  sourceType: "url";
+  id: string;
+  url: string;
+  title?: string;
+  providerMetadata?: {
+    provider?: string;
+    [key: string]: any;
+  };
+};
+
 interface ChatMessageProps {
   parts: MessagePart[];
   role: string;
@@ -43,6 +55,33 @@ const components: Components = {
 const Markdown = ({ children }: { children: string }) => {
   return <ReactMarkdown components={components}>{children}</ReactMarkdown>;
 };
+
+// SourcePart: rendering for source message parts from search grounding
+function SourcePart({ source }: { source: any }) {
+  return (
+    <div className="mb-4 rounded-lg border border-purple-500 bg-purple-950/60 p-4">
+      <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-purple-400">
+        🔗 Source
+      </div>
+      <div className="mb-1 text-sm font-bold text-purple-300">
+        {source.title || "Web Source"}
+      </div>
+      <a
+        href={source.url}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="text-xs text-purple-200 underline hover:text-purple-100"
+      >
+        {source.url}
+      </a>
+      {source.providerMetadata?.provider && (
+        <div className="mt-1 text-xs text-purple-400 opacity-70">
+          Provided by: {source.providerMetadata.provider}
+        </div>
+      )}
+    </div>
+  );
+}
 
 // ToolInvocationPart: pretty rendering for tool-invocation message parts
 function ToolInvocationPart({
@@ -97,7 +136,7 @@ function ToolInvocationPart({
                 <p className="text-xs leading-relaxed text-green-100">
                   {result.snippet}
                 </p>
-                <div className="mt-1 text-xs text-green-400 opacity-70">
+                <div className="mt-1 break-all text-xs text-green-400 opacity-70">
                   {result.link}
                 </div>
               </div>
@@ -148,12 +187,13 @@ export const ChatMessage = ({ parts, role, userName }: ChatMessageProps) => {
               );
             }
 
+            if (part.type === "source") {
+              return <SourcePart key={idx} source={part.source} />;
+            }
+
             // You can add more handlers for other part types here:
             // if (part.type === "reasoning") {
             //   return <ReasoningPart key={idx} reasoning={part.reasoning} details={part.details} />;
-            // }
-            // if (part.type === "source") {
-            //   return <SourcePart key={idx} source={part.source} />;
             // }
             // if (part.type === "file") {
             //   return <FilePart key={idx} mimeType={part.mimeType} data={part.data} />;
