@@ -163,47 +163,51 @@ export const ChatMessage = ({ parts, role, userName }: ChatMessageProps) => {
         </p>
 
         <div className="prose prose-invert max-w-none">
-          {parts.map((part, idx) => {
-            // Hover over MessagePart to see all possible types!
-            //
-            // MessagePart can be:
-            // - TextUIPart: { type: "text"; text: string; }
-            // - ReasoningUIPart: { type: "reasoning"; reasoning: string; details: Array<...>; }
-            // - ToolInvocationUIPart: { type: "tool-invocation"; toolInvocation: ToolInvocation; }
-            // - SourceUIPart: { type: "source"; source: LanguageModelV1Source; }
-            // - FileUIPart: { type: "file"; mimeType: string; data: string; }
-            // - StepStartUIPart: { type: "step-start"; }
+          {Array.isArray(parts) ? (
+            parts.map((part, idx) => {
+              // Hover over MessagePart to see all possible types!
+              //
+              // MessagePart can be:
+              // - TextUIPart: { type: "text"; text: string; }
+              // - ReasoningUIPart: { type: "reasoning"; reasoning: string; details: Array<...>; }
+              // - ToolInvocationUIPart: { type: "tool-invocation"; toolInvocation: ToolInvocation; }
+              // - SourceUIPart: { type: "source"; source: LanguageModelV1Source; }
+              // - FileUIPart: { type: "file"; mimeType: string; data: string; }
+              // - StepStartUIPart: { type: "step-start"; }
 
-            if (part.type === "text") {
-              return <Markdown key={idx}>{part.text}</Markdown>;
-            }
+              if (part.type === "text") {
+                return <Markdown key={idx}>{part.text}</Markdown>;
+              }
 
-            if (part.type === "tool-invocation") {
-              return (
-                <ToolInvocationPart
-                  key={idx}
-                  toolInvocation={part.toolInvocation}
-                />
-              );
-            }
+              if (part.type === "tool-invocation") {
+                return (
+                  <ToolInvocationPart
+                    key={idx}
+                    toolInvocation={part.toolInvocation}
+                  />
+                );
+              }
 
-            if (part.type === "source") {
-              return <SourcePart key={idx} source={part.source} />;
-            }
+              if (part.type === "source") {
+                return <SourcePart key={idx} source={part.source} />;
+              }
 
-            // You can add more handlers for other part types here:
-            // if (part.type === "reasoning") {
-            //   return <ReasoningPart key={idx} reasoning={part.reasoning} details={part.details} />;
-            // }
-            // if (part.type === "file") {
-            //   return <FilePart key={idx} mimeType={part.mimeType} data={part.data} />;
-            // }
-            // if (part.type === "step-start") {
-            //   return <StepStartPart key={idx} />;
-            // }
+              // You can add more handlers for other part types here:
+              // if (part.type === "reasoning") {
+              //   return <ReasoningPart key={idx} reasoning={part.reasoning} details={part.details} />;
+              // }
+              // if (part.type === "file") {
+              //   return <FilePart key={idx} mimeType={part.mimeType} data={part.data} />;
+              // }
+              // if (part.type === "step-start") {
+              //   return <StepStartPart key={idx} />;
+              // }
 
-            return null;
-          })}
+              return null;
+            })
+          ) : (
+            <p className="text-gray-400">Message content unavailable</p>
+          )}
         </div>
       </div>
     </div>

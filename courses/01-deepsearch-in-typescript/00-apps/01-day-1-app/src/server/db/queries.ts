@@ -1,6 +1,7 @@
-import { and, count, eq, gte } from "drizzle-orm";
+import { and, count, eq, gte, desc, asc } from "drizzle-orm";
 import { db } from "./index";
-import { userRequests, users } from "./schema";
+import { userRequests, users, chats, messages } from "./schema";
+import type { Message } from "ai";
 
 // Rate limit configuration
 export const DAILY_RATE_LIMIT = 50; // requests per day
@@ -110,4 +111,133 @@ export async function getUserRequestStats(userId: string): Promise<{
     searchGroundingRequests: searchGroundingResult[0]?.count ?? 0,
     externalToolRequests: externalToolResult[0]?.count ?? 0,
   };
+}
+
+/**
+ * Upsert a chat with all its messages
+ * If the chat exists, it will delete all existing messages and replace them with the new ones
+ * If the chat doesn't exist, it will create a new chat
+ */
+export async function upsertChat(opts: {
+  userId: string;
+  chatId: string;
+  title: string;
+  messages: Message[];
+}) {
+  const { userId, chatId, title, messages: messageList } = opts;
+
+  // Check if the chat exists and belongs to the user
+  const existingChat = await db
+    .select({ id: chats.id })
+    .from(chats)
+    .where(and(eq(chats.id, chatId), eq(chats.userId, userId)))
+    .limit(1);
+
+  if (existingChat.length > 0) {
+    // Chat exists - delete all existing messages and replace them
+    await db.delete(messages).where(eq(messages.chatId, chatId));
+
+    // Update the chat title and timestamp
+    await db
+      .update(chats)
+      .set({
+        title,
+        updatedAt: new Date(),
+      })
+      .where(eq(chats.id, chatId));
+  } else {
+    // Chat doesn't exist - create a new chat
+    await db.insert(chats).values({
+      id: chatId,
+      userId,
+      title,
+    });
+  }
+
+  // Insert all messages
+  if (messageList.length > 0) {
+    const messageValues = messageList.map((message, index) => {
+      // Ensure we always have proper parts
+      let messageParts;
+      if (message.parts && Array.isArray(message.parts)) {
+        messageParts = message.parts;
+      } else if (message.content) {
+        messageParts = [{ type: "text", text: message.content }];
+      } else {
+        messageParts = [{ type: "text", text: "" }];
+      }
+
+      return {
+        chatId,
+        role: message.role,
+        parts: messageParts,
+        order: index,
+      };
+    });
+
+    await db.insert(messages).values(messageValues);
+  }
+}
+
+/**
+ * Get a chat by id with its messages
+ */
+export async function getChat(chatId: string, userId: string) {
+  // First verify the chat belongs to the user
+  const chat = await db
+    .select()
+    .from(chats)
+    .where(and(eq(chats.id, chatId), eq(chats.userId, userId)))
+    .limit(1);
+
+  if (chat.length === 0) {
+    return null;
+  }
+
+  // Get all messages for this chat, ordered by their order field
+  const messageList = await db
+    .select()
+    .from(messages)
+    .where(eq(messages.chatId, chatId))
+    .orderBy(asc(messages.order));
+
+  // Convert messages back to the AI SDK format
+  const aiMessages: Message[] = messageList.map((msg) => {
+    // Ensure parts is always an array
+    let messageParts;
+    if (msg.parts && Array.isArray(msg.parts)) {
+      messageParts = msg.parts;
+    } else if (typeof msg.parts === "string") {
+      // If parts is a string, treat it as text content
+      messageParts = [{ type: "text", text: msg.parts }];
+    } else {
+      // Fallback for malformed data
+      messageParts = [{ type: "text", text: "Message content unavailable" }];
+    }
+
+    return {
+      id: msg.id,
+      role: msg.role as "user" | "assistant",
+      parts: messageParts,
+      content: "",
+    };
+  });
+
+  return {
+    ...chat[0],
+    messages: aiMessages,
+  };
+}
+
+/**
+ * Get all chats for a user, without the messages
+ */
+export async function getChats(userId: string) {
+  const chatList = await db
+    .select()
+    .from(chats)
+    .where(eq(chats.userId, userId))
+    .orderBy(desc(chats.updatedAt));
+
+  return chatList;
 }

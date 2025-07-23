@@ -4,10 +4,17 @@ import { ChatMessage } from "~/components/chat-message";
 import { useChat } from "@ai-sdk/react";
 import { Square, Search, Globe, AlertTriangle } from "lucide-react";
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { isNewChatCreated } from "~/utils";
+import { StickToBottom } from "use-stick-to-bottom";
+import type { Message } from "ai";
 
 interface ChatProps {
   userName: string;
   isAuthenticated: boolean;
+  chatId: string;
+  isNewChat: boolean;
+  initialMessages?: Message[];
 }
 
 interface UsageStats {
@@ -18,10 +25,17 @@ interface UsageStats {
   isAdmin: boolean;
 }
 
-export const ChatPage = ({ userName, isAuthenticated }: ChatProps) => {
+export const ChatPage = ({
+  userName,
+  isAuthenticated,
+  chatId,
+  isNewChat,
+  initialMessages,
+}: ChatProps) => {
   const [useSearchGrounding, setUseSearchGrounding] = useState(false);
   const [usageStats, setUsageStats] = useState<UsageStats | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const router = useRouter();
 
   const {
     messages,
@@ -29,11 +43,15 @@ export const ChatPage = ({ userName, isAuthenticated }: ChatProps) => {
     handleInputChange,
     handleSubmit,
     isLoading: chatLoading,
+    data,
   } = useChat({
     api: "/api/chat",
     body: {
       useSearchGrounding,
+      chatId,
+      isNewChat,
     },
+    initialMessages,
     onError: (error) => {
       if (error.message?.includes("Rate limit exceeded")) {
         // Refresh usage stats when rate limit is hit
@@ -59,6 +77,15 @@ export const ChatPage = ({ userName, isAuthenticated }: ChatProps) => {
       fetchUsageStats();
     }
   }, [isAuthenticated]);
+
+  // Handle new chat creation redirect
+  useEffect(() => {
+    const lastDataItem = data?.[data.length - 1];
+
+    if (lastDataItem && isNewChatCreated(lastDataItem)) {
+      router.push(`?id=${lastDataItem.chatId}`);
+    }
+  }, [data, router]);
 
   const handleSubmitWithUsage = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -207,24 +234,30 @@ export const ChatPage = ({ userName, isAuthenticated }: ChatProps) => {
         </div>
       )}
 
-      <div
-        className="mx-auto w-full max-w-[65ch] flex-1 overflow-y-auto p-4 scrollbar-thin scrollbar-track-gray-800 scrollbar-thumb-gray-600 hover:scrollbar-thumb-gray-500"
-        role="log"
-        aria-label="Chat messages"
+      <StickToBottom
+        className={`relative mx-auto overflow-hidden max-h-[calc(100%-${usageStats ? "213px" : "185px"})] w-full max-w-[65ch] flex-1 p-4 [&>div]:scrollbar-thin [&>div]:scrollbar-track-gray-800 [&>div]:scrollbar-thumb-gray-600 [&>div]:hover:scrollbar-thumb-gray-500`}
+        resize="smooth"
+        initial="smooth"
       >
-        {messages.map((message, index) => {
-          return (
-            <ChatMessage
-              key={index}
-              parts={message.parts ?? []}
-              role={message.role}
-              userName={userName}
-            />
-          );
-        })}
-      </div>
+        <StickToBottom.Content
+          className="overflow-y-auto p-4"
+          role="log"
+          aria-label="Chat messages"
+        >
+          {messages.map((message, index) => {
+            return (
+              <ChatMessage
+                key={index}
+                parts={message.parts ?? []}
+                role={message.role}
+                userName={userName}
+              />
+            );
+          })}
+        </StickToBottom.Content>
+      </StickToBottom>
 
-      <div className="border-t border-gray-700">
+      <div className="relative border-t border-gray-700">
         <form
           onSubmit={handleSubmitWithUsage}
           className="mx-auto max-w-[65ch] p-4"

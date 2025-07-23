@@ -1,5 +1,9 @@
 import type { Message } from "ai";
-import { streamText, createDataStreamResponse } from "ai";
+import {
+  streamText,
+  createDataStreamResponse,
+  appendResponseMessages,
+} from "ai";
 import { z } from "zod";
 import { model, modelWithSearchGrounding } from "@/model";
 import { auth } from "~/server/auth";
@@ -8,6 +12,7 @@ import {
   checkRateLimit,
   recordRequest,
   isUserAdmin,
+  upsertChat,
 } from "~/server/db/queries";
 
 export const maxDuration = 60;
@@ -22,9 +27,16 @@ export async function POST(request: Request) {
   const body = (await request.json()) as {
     messages: Array<Message>;
     useSearchGrounding?: boolean;
+    chatId: string;
+    isNewChat?: boolean;
   };
 
-  const { messages, useSearchGrounding = false } = body;
+  const {
+    messages,
+    useSearchGrounding = false,
+    chatId,
+    isNewChat = false,
+  } = body;
   const userId = session.user.id;
 
   // Check if user is admin (admins bypass rate limits)
@@ -60,8 +72,32 @@ export async function POST(request: Request) {
   // Record the request before processing
   await recordRequest(userId, "chat", useSearchGrounding);
 
+  // Generate a title from the first user message
+  const firstUserMessage = messages.find((msg) => msg.role === "user");
+  const title = firstUserMessage?.content
+    ? firstUserMessage.content.slice(0, 50) +
+      (firstUserMessage.content.length > 50 ? "..." : "")
+    : "New Chat";
+
+  // Create or update the chat immediately with the current messages
+  // This ensures we save the user's message even if the stream fails
+  await upsertChat({
+    userId,
+    chatId,
+    title,
+    messages,
+  });
+
   return createDataStreamResponse({
     execute: async (dataStream) => {
+      // Send new chat ID if this is a new chat
+      if (isNewChat) {
+        dataStream.writeData({
+          type: "NEW_CHAT_CREATED",
+          chatId,
+        });
+      }
+
       if (useSearchGrounding) {
         // Use search grounding (native model search)
         const result = streamText({
@@ -72,6 +108,22 @@ export async function POST(request: Request) {
 When users ask questions that require current information, facts, or recent events, you will automatically search the web to find relevant information.
 
 Always try to provide accurate, up-to-date information and cite your sources when possible. Be concise but thorough in your responses.`,
+          onFinish: async ({ response }) => {
+            const responseMessages = response.messages;
+
+            const updatedMessages = appendResponseMessages({
+              messages,
+              responseMessages,
+            });
+
+            // Save the updated messages to the database
+            await upsertChat({
+              userId,
+              chatId: finalChatId,
+              title,
+              messages: updatedMessages,
+            });
+          },
         });
 
         result.mergeIntoDataStream(dataStream, {
@@ -123,6 +175,22 @@ If you find multiple sources, cite the most relevant ones. Be concise but thorou
                 return mappedResults;
               },
             },
+          },
+          onFinish: async ({ response }) => {
+            const responseMessages = response.messages;
+
+            const updatedMessages = appendResponseMessages({
+              messages,
+              responseMessages,
+            });
+
+            // Save the updated messages to the database
+            await upsertChat({
+              userId,
+              chatId,
+              title,
+              messages: updatedMessages,
+            });
           },
         });
 
