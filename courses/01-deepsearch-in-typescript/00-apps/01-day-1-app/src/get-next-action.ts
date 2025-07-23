@@ -57,6 +57,8 @@ export const getNextAction = async (context: SystemContext) => {
 
 🎯 PRO TIP: Cite sources with inline links and provide details from multiple perspectives when possible!`,
     prompt: `
+User Question: ${context.getUserQuestion()}
+
 Based on this context, choose the right next action. 
 
 1) If you need more information, use 'search' with a relevant search query.

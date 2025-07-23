@@ -25,6 +25,11 @@ export class SystemContext {
   private step = 0;
 
   /**
+   * The user's original question
+   */
+  private userQuestion: string;
+
+  /**
    * The history of all queries searched
    */
   private queryHistory: QueryResult[] = [];
@@ -34,8 +39,24 @@ export class SystemContext {
    */
   private scrapeHistory: ScrapeResult[] = [];
 
+  constructor(userQuestion: string) {
+    this.userQuestion = userQuestion;
+  }
+
   shouldStop() {
     return this.step >= 10;
+  }
+
+  incrementStep() {
+    this.step++;
+  }
+
+  getStep() {
+    return this.step;
+  }
+
+  getUserQuestion() {
+    return this.userQuestion;
   }
 
   reportQueries(queries: QueryResult[]) {
