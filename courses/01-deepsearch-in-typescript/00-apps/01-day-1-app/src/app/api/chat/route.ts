@@ -14,6 +14,8 @@ import {
   isUserAdmin,
   upsertChat,
 } from "~/server/db/queries";
+import { Langfuse } from "langfuse";
+import { env } from "~/env";
 
 export const maxDuration = 60;
 
@@ -38,6 +40,18 @@ export async function POST(request: Request) {
     isNewChat = false,
   } = body;
   const userId = session.user.id;
+
+  // Initialize Langfuse client
+  const langfuse = new Langfuse({
+    environment: env.NODE_ENV,
+  });
+
+  // Create a trace for this chat session
+  const trace = langfuse.trace({
+    sessionId: chatId,
+    name: "chat",
+    userId: session.user.id,
+  });
 
   // Check if user is admin (admins bypass rate limits)
   const isAdmin = await isUserAdmin(userId);
@@ -108,6 +122,13 @@ export async function POST(request: Request) {
 When users ask questions that require current information, facts, or recent events, you will automatically search the web to find relevant information.
 
 Always try to provide accurate, up-to-date information and cite your sources when possible. Be concise but thorough in your responses.`,
+          experimental_telemetry: {
+            isEnabled: true,
+            functionId: `grounded-agent`,
+            metadata: {
+              langfuseTraceId: trace.id,
+            },
+          },
           onFinish: async ({ response }) => {
             const responseMessages = response.messages;
 
@@ -119,10 +140,13 @@ Always try to provide accurate, up-to-date information and cite your sources whe
             // Save the updated messages to the database
             await upsertChat({
               userId,
-              chatId: finalChatId,
+              chatId,
               title,
               messages: updatedMessages,
             });
+
+            // Flush the trace to Langfuse
+            await langfuse.flushAsync();
           },
         });
 
@@ -150,6 +174,13 @@ Always try to search the web when:
 When you use the searchWeb tool, always cite your sources with inline links in the format [source name](link). For example: "According to [TechCrunch](https://techcrunch.com/...), the latest iPhone was released..."
 
 If you find multiple sources, cite the most relevant ones. Be concise but thorough in your responses.`,
+          experimental_telemetry: {
+            isEnabled: true,
+            functionId: `hero-agent`,
+            metadata: {
+              langfuseTraceId: trace.id,
+            },
+          },
           maxSteps: 10,
           tools: {
             searchWeb: {
@@ -191,6 +222,9 @@ If you find multiple sources, cite the most relevant ones. Be concise but thorou
               title,
               messages: updatedMessages,
             });
+
+            // Flush the trace to Langfuse
+            await langfuse.flushAsync();
           },
         });
 
