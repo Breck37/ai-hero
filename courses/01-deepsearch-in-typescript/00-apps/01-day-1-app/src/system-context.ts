@@ -59,6 +59,14 @@ export class SystemContext {
     return this.userQuestion;
   }
 
+  hasSearchResults() {
+    return this.queryHistory.length > 0;
+  }
+
+  hasScrapedContent() {
+    return this.scrapeHistory.length > 0;
+  }
+
   reportQueries(queries: QueryResult[]) {
     this.queryHistory.push(...queries);
   }

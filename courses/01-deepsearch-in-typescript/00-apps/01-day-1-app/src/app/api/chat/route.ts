@@ -197,7 +197,7 @@ export async function POST(request: Request) {
         keyPrefix: globalRateLimitConfig.keyPrefix,
       });
 
-      const result = streamFromDeepSearch({
+      const result = await streamFromDeepSearch({
         messages,
         useSearchGrounding,
         telemetry: {

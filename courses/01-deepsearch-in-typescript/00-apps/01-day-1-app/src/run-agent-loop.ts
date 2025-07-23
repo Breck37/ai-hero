@@ -1,3 +1,4 @@
+import { type StreamTextResult } from "ai";
 import { SystemContext } from "./system-context";
 import { getNextAction, type Action } from "./get-next-action";
 import { answerQuestion } from "./answer-question";
@@ -51,7 +52,9 @@ const scrapeUrl = async (urls: string[]) => {
   }));
 };
 
-export const runAgentLoop = async (userQuestion: string) => {
+export const runAgentLoop = async (
+  userQuestion: string,
+): Promise<StreamTextResult<{}, string>> => {
   // A persistent container for the state of our system
   const ctx = new SystemContext(userQuestion);
 
@@ -60,7 +63,7 @@ export const runAgentLoop = async (userQuestion: string) => {
   while (!ctx.shouldStop()) {
     // We choose the next action based on the state of our system
     const nextAction = await getNextAction(ctx);
-
+    console.log({ nextAction });
     // We execute the action and update the state of our system
     if (nextAction.type === "search") {
       if (!nextAction.query) {
@@ -96,7 +99,7 @@ export const runAgentLoop = async (userQuestion: string) => {
 
       ctx.reportScrapes(scrapeResult);
     } else if (nextAction.type === "answer") {
-      return await answerQuestion(ctx);
+      return answerQuestion(ctx);
     }
 
     // We increment the step counter
@@ -105,5 +108,5 @@ export const runAgentLoop = async (userQuestion: string) => {
 
   // If we've taken 10 actions and still don't have an answer,
   // we ask the LLM to give its best attempt at an answer
-  return await answerQuestion(ctx, { isFinal: true });
+  return answerQuestion(ctx, { isFinal: true });
 };

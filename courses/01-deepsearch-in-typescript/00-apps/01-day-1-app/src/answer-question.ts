@@ -1,11 +1,11 @@
-import { generateText } from "ai";
+import { streamText, type StreamTextResult } from "ai";
 import { model } from "../model";
 import type { SystemContext } from "./system-context";
 
-export const answerQuestion = async (
+export const answerQuestion = (
   context: SystemContext,
   options: { isFinal?: boolean } = {},
-) => {
+): StreamTextResult<{}, string> => {
   const { isFinal = false } = options;
 
   const systemPrompt = `You are a helpful assistant that provides accurate, well-researched answers based on web search results and scraped content.
@@ -23,7 +23,7 @@ ${isFinal ? "⚠️ IMPORTANT: We may not have all the information needed to ans
 
 🎯 Format your answer clearly with proper markdown formatting.`;
 
-  const result = await generateText({
+  return streamText({
     model,
     system: systemPrompt,
     prompt: `
@@ -39,6 +39,4 @@ ${context.getScrapeHistory()}
 
 Please provide a comprehensive answer to the user's question based on the information above.`,
   });
-
-  return result.text;
 };

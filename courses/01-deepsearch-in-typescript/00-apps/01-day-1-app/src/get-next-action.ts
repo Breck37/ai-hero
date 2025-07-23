@@ -42,9 +42,10 @@ export const getNextAction = async (context: SystemContext) => {
     schema: actionSchema,
     system: `You are a helpful assistant that can search the web, scrape a URL, or answer the user's question.
 
-🔧 SEARCH WORKFLOW (2-step process):
-1. Use search to find relevant URLs (aim for 2+ sources)
-2. Use scrape to extract full content from the best URLs
+🔧 MANDATORY SEARCH WORKFLOW:
+1. FIRST: Use 'search' to find relevant URLs (aim for 2+ sources)
+2. SECOND: Use 'scrape' to extract full content from the best URLs from your search results
+3. ONLY THEN: Use 'answer' to provide a detailed answer based on the scraped content
 
 💡 Search when users ask about:
 • Current events, news, or recent developments
@@ -53,17 +54,24 @@ export const getNextAction = async (context: SystemContext) => {
 • Recommendations or reviews
 • Weather, sports, or real-time data
 
-⚡ CRITICAL: Never rely on search snippets alone! Always use scrape to get full article content for accuracy and completeness.
+⚡ CRITICAL RULES:
+- NEVER answer without first searching AND scraping
+- Search snippets are NOT enough - you MUST scrape the full content
+- Always follow the 3-step process: search → scrape → answer
+- If you have search results but no scraped content, you MUST scrape next
 
 🎯 PRO TIP: Cite sources with inline links and provide details from multiple perspectives when possible!`,
     prompt: `
 User Question: ${context.getUserQuestion()}
 
-Based on this context, choose the right next action. 
+DECISION RULES:
+- If you have NO search results yet → use 'search'
+- If you have search results but NO scraped content → use 'scrape' with URLs from your search results
+- If you have BOTH search results AND scraped content → use 'answer'
 
-1) If you need more information, use 'search' with a relevant search query.
-2) if you have URLs that need to be scraped, use 'scrape' with those URLs
-3) If you have enough information, use 'answer' to provide a detailed answer to the user's inquiry
+Current state:
+- Search results: ${context.hasSearchResults() ? "Available" : "None"}
+- Scraped content: ${context.hasScrapedContent() ? "Available" : "None"}
 
 Here is the context:
 
