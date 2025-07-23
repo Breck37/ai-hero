@@ -113,7 +113,7 @@ function ToolInvocationPart({
           <span className="font-mono">
             {isSearchWeb ? "Query:" : isScrapePages ? "URLs:" : "Args:"}
           </span>
-          <div className="mt-1 rounded bg-blue-900/60 p-2 text-blue-100">
+          <div className="mt-1 break-all rounded bg-blue-900/60 p-2 text-blue-100">
             {isSearchWeb
               ? toolInvocation.args.query
               : isScrapePages
@@ -188,7 +188,7 @@ function ToolInvocationPart({
                         Error: {result.error}
                       </p>
                     )}
-                    <div className="mt-1 flex items-center justify-between">
+                    <div className="mt-1 flex flex-col items-start justify-between gap-2">
                       <div className="break-all text-xs text-green-400 opacity-70">
                         {result.url}
                       </div>
