@@ -1,30 +1,56 @@
 import type { Message } from "ai";
-import {
-  streamText,
-  createDataStreamResponse,
-  appendResponseMessages,
-} from "ai";
-import { z } from "zod";
-import { model, modelWithSearchGrounding } from "@/model";
+import { createDataStreamResponse, appendResponseMessages } from "ai";
 import { auth } from "~/server/auth";
-import { searchSerper } from "~/serper";
 import {
-  checkRateLimit,
+  checkRateLimit as checkUserRateLimit,
   recordRequest,
   isUserAdmin,
   upsertChat,
 } from "~/server/db/queries";
 import { Langfuse } from "langfuse";
 import { env } from "~/env";
+import { streamFromDeepSearch } from "~/deep-search";
+import { checkRateLimit, recordRateLimit } from "~/server/rate-limit";
 
 export const maxDuration = 60;
 
 export async function POST(request: Request) {
+  // Initialize Langfuse client
+  const langfuse = new Langfuse({
+    environment: env.NODE_ENV,
+  });
+
+  // Create a trace for this chat session (we'll update sessionId later)
+  const trace = langfuse.trace({
+    name: "chat",
+    userId: "unknown", // We'll update this after auth
+  });
+
+  // Database call: Authentication
+  const authSpan = trace.span({
+    name: "auth-check",
+    input: { requestMethod: "POST" },
+  });
+
   const session = await auth();
+
+  authSpan.end({
+    output: {
+      authenticated: !!session?.user,
+      userId: session?.user?.id || null,
+    },
+  });
 
   if (!session?.user) {
     return new Response("Unauthorized", { status: 401 });
   }
+
+  const userId = session.user.id;
+
+  // Update trace with actual userId
+  trace.update({
+    userId: session.user.id,
+  });
 
   const body = (await request.json()) as {
     messages: Array<Message>;
@@ -39,26 +65,35 @@ export async function POST(request: Request) {
     chatId,
     isNewChat = false,
   } = body;
-  const userId = session.user.id;
 
-  // Initialize Langfuse client
-  const langfuse = new Langfuse({
-    environment: env.NODE_ENV,
+  // Database call: Check if user is admin
+  const adminCheckSpan = trace.span({
+    name: "admin-check",
+    input: { userId },
   });
 
-  // Create a trace for this chat session
-  const trace = langfuse.trace({
-    sessionId: chatId,
-    name: "chat",
-    userId: session.user.id,
-  });
-
-  // Check if user is admin (admins bypass rate limits)
   const isAdmin = await isUserAdmin(userId);
 
+  adminCheckSpan.end({
+    output: { isAdmin },
+  });
+
   if (!isAdmin) {
-    // Check rate limit for non-admin users
-    const rateLimitCheck = await checkRateLimit(userId);
+    // Database call: Check rate limit for non-admin users
+    const rateLimitSpan = trace.span({
+      name: "rate-limit-check",
+      input: { userId },
+    });
+
+    const rateLimitCheck = await checkUserRateLimit(userId);
+
+    rateLimitSpan.end({
+      output: {
+        allowed: rateLimitCheck.allowed,
+        currentCount: rateLimitCheck.currentCount,
+        limit: rateLimitCheck.limit,
+      },
+    });
 
     if (!rateLimitCheck.allowed) {
       return new Response(
@@ -83,8 +118,17 @@ export async function POST(request: Request) {
     }
   }
 
-  // Record the request before processing
+  // Database call: Record the request before processing
+  const recordRequestSpan = trace.span({
+    name: "record-request",
+    input: { userId, requestType: "chat", useSearchGrounding },
+  });
+
   await recordRequest(userId, "chat", useSearchGrounding);
+
+  recordRequestSpan.end({
+    output: { success: true },
+  });
 
   // Generate a title from the first user message
   const firstUserMessage = messages.find((msg) => msg.role === "user");
@@ -93,13 +137,27 @@ export async function POST(request: Request) {
       (firstUserMessage.content.length > 50 ? "..." : "")
     : "New Chat";
 
-  // Create or update the chat immediately with the current messages
+  // Database call: Create or update the chat immediately with the current messages
   // This ensures we save the user's message even if the stream fails
+  const initialUpsertSpan = trace.span({
+    name: "upsert-chat-initial",
+    input: { userId, chatId, title, messageCount: messages.length },
+  });
+
   await upsertChat({
     userId,
     chatId,
     title,
     messages,
+  });
+
+  initialUpsertSpan.end({
+    output: { success: true },
+  });
+
+  // Update trace with actual sessionId now that we have the chatId
+  trace.update({
+    sessionId: chatId,
   });
 
   return createDataStreamResponse({
@@ -112,122 +170,83 @@ export async function POST(request: Request) {
         });
       }
 
-      if (useSearchGrounding) {
-        // Use search grounding (native model search)
-        const result = streamText({
-          model: modelWithSearchGrounding,
-          messages,
-          system: `You are a helpful AI assistant with access to web search capabilities through search grounding.
+      // Global rate limiting for LLM calls
+      const globalRateLimitConfig = {
+        maxRequests: 50, // For testing: only 1 request
+        windowMs: 60_000, // per 2 seconds
+        keyPrefix: "global_llm",
+        maxRetries: 3,
+      };
 
-When users ask questions that require current information, facts, or recent events, you will automatically search the web to find relevant information.
+      // Check the global rate limit
+      const globalRateLimitCheck = await checkRateLimit(globalRateLimitConfig);
 
-Always try to provide accurate, up-to-date information and cite your sources when possible. Be concise but thorough in your responses.`,
-          experimental_telemetry: {
-            isEnabled: true,
-            functionId: `grounded-agent`,
-            metadata: {
-              langfuseTraceId: trace.id,
-            },
+      if (!globalRateLimitCheck.allowed) {
+        console.log("Global rate limit exceeded, waiting...");
+        const isAllowed = await globalRateLimitCheck.retry();
+
+        // If the rate limit is still exceeded after retries, throw an error
+        if (!isAllowed) {
+          throw new Error("Global rate limit exceeded");
+        }
+      }
+
+      // Record the global rate limit
+      await recordRateLimit({
+        windowMs: globalRateLimitConfig.windowMs,
+        keyPrefix: globalRateLimitConfig.keyPrefix,
+      });
+
+      const result = streamFromDeepSearch({
+        messages,
+        useSearchGrounding,
+        telemetry: {
+          isEnabled: true,
+          functionId: useSearchGrounding ? `grounded-agent` : `hero-agent`,
+          metadata: {
+            langfuseTraceId: trace.id,
           },
-          onFinish: async ({ response }) => {
-            const responseMessages = response.messages;
+        },
+        onFinish: async ({ response }) => {
+          const responseMessages = response.messages;
 
-            const updatedMessages = appendResponseMessages({
-              messages,
-              responseMessages,
-            });
+          const updatedMessages = appendResponseMessages({
+            messages,
+            responseMessages,
+          });
 
-            // Save the updated messages to the database
-            await upsertChat({
+          // Database call: Save the updated messages to the database
+          const finalUpsertSpan = trace.span({
+            name: "upsert-chat-final",
+            input: {
               userId,
               chatId,
               title,
-              messages: updatedMessages,
-            });
+              messageCount: updatedMessages.length,
+            },
+          });
 
-            // Flush the trace to Langfuse
-            await langfuse.flushAsync();
-          },
-        });
+          await upsertChat({
+            userId,
+            chatId,
+            title,
+            messages: updatedMessages,
+          });
 
+          finalUpsertSpan.end({
+            output: { success: true },
+          });
+
+          // Flush the trace to Langfuse
+          await langfuse.flushAsync();
+        },
+      });
+
+      if (useSearchGrounding) {
         result.mergeIntoDataStream(dataStream, {
           sendSources: true,
         });
       } else {
-        // Use external search tool
-        const result = streamText({
-          model,
-          messages,
-          system: `You are a helpful AI assistant with access to web search capabilities. 
-
-When users ask questions that require current information, facts, or recent events, you should use the searchWeb tool to find relevant information.
-
-Critical: Always search multiple sources. Each response should provide details from at least 2 sources
-
-Always try to search the web when:
-- Users ask about current events, news, or recent developments
-- Users ask for factual information that might be time-sensitive
-- Users ask about specific products, companies, or people
-- Users ask for recommendations or reviews
-- Users ask about weather, sports scores, or other real-time data
-
-When you use the searchWeb tool, always cite your sources with inline links in the format [source name](link). For example: "According to [TechCrunch](https://techcrunch.com/...), the latest iPhone was released..."
-
-If you find multiple sources, cite the most relevant ones. Be concise but thorough in your responses.`,
-          experimental_telemetry: {
-            isEnabled: true,
-            functionId: `hero-agent`,
-            metadata: {
-              langfuseTraceId: trace.id,
-            },
-          },
-          maxSteps: 10,
-          tools: {
-            searchWeb: {
-              parameters: z.object({
-                query: z.string().describe("The query to search the web for"),
-              }),
-              execute: async ({ query }, { abortSignal }) => {
-                const results = await searchSerper(
-                  { q: query, num: 10 },
-                  abortSignal,
-                );
-
-                const mappedResults: Array<{
-                  title: string;
-                  link: string;
-                  snippet: string;
-                }> = results.organic.map((result) => ({
-                  title: result.title,
-                  link: result.link,
-                  snippet: result.snippet,
-                }));
-
-                return mappedResults;
-              },
-            },
-          },
-          onFinish: async ({ response }) => {
-            const responseMessages = response.messages;
-
-            const updatedMessages = appendResponseMessages({
-              messages,
-              responseMessages,
-            });
-
-            // Save the updated messages to the database
-            await upsertChat({
-              userId,
-              chatId,
-              title,
-              messages: updatedMessages,
-            });
-
-            // Flush the trace to Langfuse
-            await langfuse.flushAsync();
-          },
-        });
-
         result.mergeIntoDataStream(dataStream);
       }
     },
