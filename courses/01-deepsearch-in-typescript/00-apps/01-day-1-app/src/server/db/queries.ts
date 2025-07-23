@@ -156,12 +156,33 @@ export async function upsertChat(opts: {
 
   // Insert all messages
   if (messageList.length > 0) {
-    const messageValues = messageList.map((message, index) => ({
-      chatId,
-      role: message.role,
-      parts: message.content,
-      order: index,
-    }));
+    const messageValues = messageList.map((message, index) => {
+      // Debug: log what we're storing
+      console.log("Storing message:", {
+        role: message.role,
+        content: message.content,
+        parts: message.parts,
+        partsType: typeof message.parts,
+        isArray: Array.isArray(message.parts),
+      });
+
+      // Ensure we always have proper parts
+      let messageParts;
+      if (message.parts && Array.isArray(message.parts)) {
+        messageParts = message.parts;
+      } else if (message.content) {
+        messageParts = [{ type: "text", text: message.content }];
+      } else {
+        messageParts = [{ type: "text", text: "" }];
+      }
+
+      return {
+        chatId,
+        role: message.role,
+        parts: messageParts,
+        order: index,
+      };
+    });
 
     await db.insert(messages).values(messageValues);
   }
@@ -190,11 +211,35 @@ export async function getChat(chatId: string, userId: string) {
     .orderBy(asc(messages.order));
 
   // Convert messages back to the AI SDK format
-  const aiMessages: Message[] = messageList.map((msg) => ({
-    id: msg.id,
-    role: msg.role as "user" | "assistant",
-    content: msg.parts as string,
-  }));
+  const aiMessages: Message[] = messageList.map((msg) => {
+    // Debug: log what we're getting from the database
+    console.log("Raw message from DB:", {
+      id: msg.id,
+      role: msg.role,
+      parts: msg.parts,
+      partsType: typeof msg.parts,
+      isArray: Array.isArray(msg.parts),
+    });
+
+    // Ensure parts is always an array
+    let messageParts;
+    if (msg.parts && Array.isArray(msg.parts)) {
+      messageParts = msg.parts;
+    } else if (typeof msg.parts === "string") {
+      // If parts is a string, treat it as text content
+      messageParts = [{ type: "text", text: msg.parts }];
+    } else {
+      // Fallback for malformed data
+      messageParts = [{ type: "text", text: "Message content unavailable" }];
+    }
+
+    return {
+      id: msg.id,
+      role: msg.role as "user" | "assistant",
+      parts: messageParts,
+      content: "",
+    };
+  });
 
   return {
     ...chat[0],

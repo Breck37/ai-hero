@@ -68,6 +68,7 @@ export async function POST(request: Request) {
 
   // Generate a chat ID if none provided
   const finalChatId = chatId || crypto.randomUUID();
+  const isNewChat = !chatId;
 
   // Generate a title from the first user message
   const firstUserMessage = messages.find((msg) => msg.role === "user");
@@ -87,6 +88,14 @@ export async function POST(request: Request) {
 
   return createDataStreamResponse({
     execute: async (dataStream) => {
+      // Send new chat ID if this is a new chat
+      if (isNewChat) {
+        dataStream.writeData({
+          type: "NEW_CHAT_CREATED",
+          chatId: finalChatId,
+        });
+      }
+
       if (useSearchGrounding) {
         // Use search grounding (native model search)
         const result = streamText({
