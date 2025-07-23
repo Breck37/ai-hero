@@ -4,6 +4,7 @@ import { model, modelWithSearchGrounding } from "@/model";
 import { searchSerper } from "~/serper";
 import { bulkCrawlWebsites } from "~/scraper";
 import { checkRateLimit, recordRateLimit } from "~/server/rate-limit";
+import { env } from "~/env";
 
 // Helper function to get current date and time
 const getCurrentDateTime = () => {
@@ -97,7 +98,7 @@ You have native search grounding capabilities, so you'll automatically search wh
           }),
           execute: async ({ query }, { abortSignal }) => {
             const results = await searchSerper(
-              { q: query, num: 10 },
+              { q: query, num: env.SEARCH_RESULTS_COUNT },
               abortSignal,
             );
 
