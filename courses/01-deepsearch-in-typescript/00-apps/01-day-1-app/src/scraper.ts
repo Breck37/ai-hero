@@ -11,6 +11,7 @@ const MAX_DELAY_MS = 8000; // 8 seconds
 export interface CrawlSuccessResponse {
   success: true;
   data: string;
+  date?: string | null;
 }
 
 export interface CrawlErrorResponse {
@@ -55,7 +56,63 @@ const turndownService = new TurndownService({
   emDelimiter: "*",
 });
 
-const extractArticleText = (html: string): string => {
+// Helper function to extract publication date from HTML
+const extractPublicationDate = (html: string): string | null => {
+  const $ = cheerio.load(html);
+
+  // Common date selectors
+  const dateSelectors = [
+    "time[datetime]",
+    "time",
+    ".date",
+    ".published",
+    ".post-date",
+    ".article-date",
+    ".entry-date",
+    "[data-date]",
+    ".timestamp",
+    ".meta-date",
+    ".publish-date",
+    ".created-date",
+    ".updated-date",
+    ".date-published",
+    ".date-created",
+    ".date-updated",
+  ];
+
+  for (const selector of dateSelectors) {
+    const element = $(selector);
+    if (element.length) {
+      const dateTime = element.attr("datetime") || element.text().trim();
+      if (dateTime) {
+        return dateTime;
+      }
+    }
+  }
+
+  // Look for date patterns in text content
+  const text = $.text();
+  const datePatterns = [
+    /(\d{1,2}\/\d{1,2}\/\d{4})/g,
+    /(\d{1,2}-\d{1,2}-\d{4})/g,
+    /(\w+ \d{1,2},? \d{4})/g,
+    /(\d{4}-\d{2}-\d{2})/g,
+    /(\d{1,2}\.\d{1,2}\.\d{4})/g,
+  ];
+
+  for (const pattern of datePatterns) {
+    const match = text.match(pattern);
+    if (match) {
+      return match[0];
+    }
+  }
+
+  return null;
+};
+
+const extractArticleText = (
+  html: string,
+): { content: string; date: string | null } => {
   const $ = cheerio.load(html);
   $("script, style, nav, header, footer, iframe, noscript").remove();
 
@@ -82,7 +139,12 @@ const extractArticleText = (html: string): string => {
     content = turndownService.turndown($("body").html() || "");
   }
 
-  return content.trim();
+  const date = extractPublicationDate(html);
+
+  return {
+    content: content.trim(),
+    date,
+  };
 };
 
 const checkRobotsTxt = async (url: string): Promise<boolean> => {
@@ -163,10 +225,11 @@ export const crawlWebsite = cacheWithRedis(
 
         if (response.ok) {
           const html = await response.text();
-          const articleText = extractArticleText(html);
+          const { content, date } = extractArticleText(html);
           return {
             success: true,
-            data: articleText,
+            data: content,
+            date,
           };
         }
 

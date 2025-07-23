@@ -150,8 +150,15 @@ function ToolInvocationPart({
                     <p className="text-xs leading-relaxed text-green-100">
                       {result.snippet}
                     </p>
-                    <div className="mt-1 break-all text-xs text-green-400 opacity-70">
-                      {result.link}
+                    <div className="mt-1 flex items-center justify-between">
+                      <div className="break-all text-xs text-green-400 opacity-70">
+                        {result.link}
+                      </div>
+                      {result.date && (
+                        <div className="text-xs text-green-300 opacity-80">
+                          📅 {result.date}
+                        </div>
+                      )}
                     </div>
                   </>
                 ) : isScrapePages ? (
@@ -181,8 +188,15 @@ function ToolInvocationPart({
                         Error: {result.error}
                       </p>
                     )}
-                    <div className="mt-1 break-all text-xs text-green-400 opacity-70">
-                      {result.url}
+                    <div className="mt-1 flex items-center justify-between">
+                      <div className="break-all text-xs text-green-400 opacity-70">
+                        {result.url}
+                      </div>
+                      {result.date && (
+                        <div className="text-xs text-green-300 opacity-80">
+                          📅 {result.date}
+                        </div>
+                      )}
                     </div>
                   </>
                 ) : (

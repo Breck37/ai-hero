@@ -20,6 +20,23 @@ import { bulkCrawlWebsites } from "~/scraper";
 
 export const maxDuration = 60;
 
+// Helper function to get current date and time
+const getCurrentDateTime = () => {
+  const now = new Date();
+  return {
+    date: now.toLocaleDateString("en-US", {
+      weekday: "long",
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+    }),
+    time: now.toLocaleTimeString("en-US", {
+      timeZoneName: "short",
+    }),
+    full: now.toISOString(),
+  };
+};
+
 export async function POST(request: Request) {
   const session = await auth();
 
@@ -115,12 +132,17 @@ export async function POST(request: Request) {
 
       if (useSearchGrounding) {
         // Use search grounding (native model search)
+        const currentDateTime = getCurrentDateTime();
         const result = streamText({
           model: modelWithSearchGrounding,
           messages,
           system: `You are a helpful AI assistant with access to web search capabilities through search grounding.
 
+CURRENT DATE AND TIME: ${currentDateTime.date} at ${currentDateTime.time} (${currentDateTime.full})
+
 When users ask questions that require current information, facts, or recent events, you will automatically search the web to find relevant information.
+
+IMPORTANT: When users ask for "up to date" information, "latest news", "current events", or similar time-sensitive queries, always reference the current date and time to provide context about what "up to date" means. Use this information to determine if search results are recent enough.
 
 Always try to provide accurate, up-to-date information and cite your sources when possible. Be concise but thorough in your responses.`,
           experimental_telemetry: {
@@ -156,12 +178,17 @@ Always try to provide accurate, up-to-date information and cite your sources whe
         });
       } else {
         // Use external search tool
+        const currentDateTime = getCurrentDateTime();
         const result = streamText({
           model,
           messages,
           system: `You are a helpful AI assistant with access to web search capabilities. 
 
+CURRENT DATE AND TIME: ${currentDateTime.date} at ${currentDateTime.time} (${currentDateTime.full})
+
 When users ask questions that require current information, facts, or recent events, you should use the searchWeb tool to find relevant information.
+
+IMPORTANT: When users ask for "up to date" information, "latest news", "current events", or similar time-sensitive queries, always reference the current date and time to provide context about what "up to date" means. Use this information to determine if search results are recent enough.
 
 Critical: Always search multiple sources. Each response should provide details from at least 2 sources
 
@@ -212,10 +239,12 @@ This workflow ensures you have complete information rather than just search snip
                   title: string;
                   link: string;
                   snippet: string;
+                  date?: string;
                 }> = results.organic.map((result) => ({
                   title: result.title,
                   link: result.link,
                   snippet: result.snippet,
+                  date: result.date,
                 }));
 
                 return mappedResults;
@@ -247,6 +276,7 @@ This workflow ensures you have complete information rather than just search snip
                   url: r.url,
                   success: true,
                   data: r.result.data,
+                  date: r.result.date,
                   error: "",
                 }));
               },
