@@ -1,6 +1,6 @@
 import type { Message, TelemetrySettings } from "ai";
 import { streamText } from "ai";
-import { model } from "@/model";
+import { getModel } from "@/model";
 import { searchSerper } from "~/serper";
 import { z } from "zod";
 import { bulkCrawlWebsites } from "~/scraper";
@@ -9,9 +9,17 @@ export const streamFromDeepSearch = (opts: {
   messages: Message[];
   onFinish: Parameters<typeof streamText>[0]["onFinish"];
   telemetry: TelemetrySettings;
-}) =>
-  streamText({
-    model,
+  modelProvider?: string;
+  modelName?: string;
+}) => {
+  // Use the specified model or fall back to default
+  const selectedModel =
+    opts.modelProvider && opts.modelName
+      ? getModel(opts.modelProvider, opts.modelName)
+      : getModel("google", "gemini-1.5-flash"); // Default fallback
+
+  return streamText({
+    model: selectedModel,
     messages: opts.messages,
     maxSteps: 20,
     system: `CURRENT DATE AND TIME: ${new Date().toISOString()}
@@ -170,6 +178,7 @@ IMPORTANT: The searchWeb tool returns results with 'link' fields. You MUST extra
     onFinish: opts.onFinish,
     experimental_telemetry: opts.telemetry,
   });
+};
 
 export async function askDeepSearch(messages: Message[]) {
   const result = streamFromDeepSearch({

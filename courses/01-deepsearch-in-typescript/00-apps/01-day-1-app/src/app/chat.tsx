@@ -2,11 +2,12 @@
 
 import { ChatMessage } from "~/components/chat-message";
 import { SignInModal } from "~/components/sign-in-modal";
+import { ModelSwitcher } from "~/components/model-switcher";
 import { useChat } from "@ai-sdk/react";
 import { Square } from "lucide-react";
 import { ErrorMessage } from "~/components/error-message";
 import { useRouter } from "next/navigation";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { StickToBottom } from "use-stick-to-bottom";
 
 interface ChatProps {
@@ -38,6 +39,11 @@ export const ChatPage = ({
   isNewChat,
   initialMessages,
 }: ChatProps) => {
+  const [selectedModel, setSelectedModel] = useState<{
+    provider: string;
+    model: string;
+  } | null>(null);
+
   const {
     messages,
     input,
@@ -48,7 +54,12 @@ export const ChatPage = ({
     reload,
     data,
   } = useChat({
-    body: { chatId, isNewChat },
+    body: {
+      chatId,
+      isNewChat,
+      modelProvider: selectedModel?.provider,
+      modelName: selectedModel?.model,
+    },
     initialMessages,
   });
 
@@ -73,11 +84,27 @@ export const ChatPage = ({
     }
   }, [data, router]);
 
+  const handleModelChange = (provider: string, model: string) => {
+    setSelectedModel({ provider, model });
+  };
+
   return (
     <>
       <div className="flex flex-1 flex-col">
+        {/* Model Switcher Header */}
+        <div className="border-b border-gray-700 bg-gray-900 p-4">
+          <div className="mx-auto flex max-w-[65ch] items-center justify-between">
+            <h1 className="text-lg font-semibold text-gray-200">AI Chat</h1>
+            <ModelSwitcher
+              onModelChange={handleModelChange}
+              currentModel={selectedModel || undefined}
+              disabled={isLoading}
+            />
+          </div>
+        </div>
+
         <StickToBottom
-          className="relative mx-auto max-h-[calc(100%-75px)] w-full max-w-[65ch] flex-1 p-4 [&>div]:scrollbar-thin [&>div]:scrollbar-track-gray-800 [&>div]:scrollbar-thumb-gray-600 [&>div]:hover:scrollbar-thumb-gray-500"
+          className="relative mx-auto max-h-[calc(100%-140px)] w-full max-w-[65ch] flex-1 p-4 [&>div]:scrollbar-thin [&>div]:scrollbar-track-gray-800 [&>div]:scrollbar-thumb-gray-600 [&>div]:hover:scrollbar-thumb-gray-500"
           resize="smooth"
           initial="smooth"
         >

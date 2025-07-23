@@ -126,6 +126,8 @@ export async function POST(request: Request) {
     chatId: string;
     isNewChat: boolean;
     title?: string;
+    modelProvider?: string;
+    modelName?: string;
   };
 
   const { chatId, isNewChat } = body;
@@ -200,6 +202,8 @@ export async function POST(request: Request) {
 
       const result = streamFromDeepSearch({
         messages,
+        modelProvider: body.modelProvider,
+        modelName: body.modelName,
         onFinish: async ({ response }) => {
           // Merge messages and save to DB
           const updatedMessages = appendResponseMessages({
