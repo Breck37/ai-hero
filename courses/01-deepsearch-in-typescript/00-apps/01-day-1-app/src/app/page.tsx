@@ -3,20 +3,48 @@ import Link from "next/link";
 import { auth } from "~/server/auth/index.ts";
 import { ChatPage } from "./chat.tsx";
 import { AuthButton } from "../components/auth-button.tsx";
+import { ChatList } from "../components/chat-list.tsx";
+import { getChats, getChat } from "~/server/db/queries";
+import type { Message as AIMessage } from "ai";
+import { connection } from "next/server";
 
-const chats = [
-  {
-    id: "1",
-    title: "My First Chat",
-  },
-];
-
-const activeChatId = "1";
-
-export default async function HomePage() {
+export default async function HomePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ id?: string }>;
+}) {
   const session = await auth();
   const userName = session?.user?.name ?? "Guest";
   const isAuthenticated = !!session?.user;
+  const userId = session?.user?.id;
+  const { id: chatIdFromUrl } = await searchParams;
+
+  /**
+   * Next.js requires await connection() before using crypto.randomUUID() in a server component.
+   * This ensures that the generated UUID is unique per request and not cached across requests.
+   * See: https://nextjs.org/docs/messages/next-prerender-crypto
+   */
+  await connection();
+  const chatId = chatIdFromUrl ?? crypto.randomUUID();
+  const isNewChat = !chatIdFromUrl;
+
+  let chats: any[] = [];
+  let initialMessages: AIMessage[] | undefined = undefined;
+
+  if (isAuthenticated && userId) {
+    chats = await getChats({ userId });
+    if (!isNewChat) {
+      const chat = await getChat({ userId, chatId: chatIdFromUrl });
+      if (chat && chat.messages) {
+        initialMessages = chat.messages.map((msg) => ({
+          id: String(msg.id),
+          role: msg.role as "user" | "assistant",
+          parts: msg.parts as AIMessage["parts"],
+          content: "",
+        }));
+      }
+    }
+  }
 
   return (
     <div className="flex h-screen bg-gray-950">
@@ -37,28 +65,11 @@ export default async function HomePage() {
           </div>
         </div>
         <div className="-mt-1 flex-1 space-y-2 overflow-y-auto px-4 pt-1 scrollbar-thin scrollbar-track-gray-800 scrollbar-thumb-gray-600">
-          {chats.length > 0 ? (
-            chats.map((chat) => (
-              <div key={chat.id} className="flex items-center gap-2">
-                <Link
-                  href={`/?chatId=${chat.id}`}
-                  className={`flex-1 rounded-lg p-3 text-left text-sm text-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-400 ${
-                    chat.id === activeChatId
-                      ? "bg-gray-700"
-                      : "hover:bg-gray-750 bg-gray-800"
-                  }`}
-                >
-                  {chat.title}
-                </Link>
-              </div>
-            ))
-          ) : (
-            <p className="text-sm text-gray-500">
-              {isAuthenticated
-                ? "No chats yet. Start a new conversation!"
-                : "Sign in to start chatting"}
-            </p>
-          )}
+          <ChatList
+            chats={chats}
+            currentChatId={chatIdFromUrl}
+            isAuthenticated={isAuthenticated}
+          />
         </div>
         <div className="p-4">
           <AuthButton
@@ -68,7 +79,14 @@ export default async function HomePage() {
         </div>
       </div>
 
-      <ChatPage userName={userName} />
+      <ChatPage
+        key={chatIdFromUrl || "new-chat"}
+        userName={userName}
+        isAuthenticated={isAuthenticated}
+        chatId={chatId}
+        isNewChat={isNewChat}
+        initialMessages={initialMessages}
+      />
     </div>
   );
 }

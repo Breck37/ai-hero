@@ -1,7 +1,13 @@
 import ReactMarkdown, { type Components } from "react-markdown";
+import type { Message } from "ai";
+
+export type MessagePart = NonNullable<Message["parts"]>[number];
+
+// Import ToolInvocation type for strong typing
+import type { ToolInvocation } from "ai";
 
 interface ChatMessageProps {
-  text: string;
+  parts: MessagePart[];
   role: string;
   userName: string;
 }
@@ -38,7 +44,79 @@ const Markdown = ({ children }: { children: string }) => {
   return <ReactMarkdown components={components}>{children}</ReactMarkdown>;
 };
 
-export const ChatMessage = ({ text, role, userName }: ChatMessageProps) => {
+// ToolInvocationPart: pretty rendering for tool-invocation message parts
+function ToolInvocationPart({
+  toolInvocation,
+}: {
+  toolInvocation: ToolInvocation;
+}) {
+  // Helper to render sources as links if result is an array of { title, url }
+  function renderResult(result: any) {
+    if (
+      Array.isArray(result) &&
+      result.length > 0 &&
+      result.every(
+        (item) =>
+          item &&
+          typeof item === "object" &&
+          typeof item.title === "string" &&
+          (typeof item.link === "string" || typeof item.url === "string"),
+      )
+    ) {
+      return (
+        <div className="mt-1 flex flex-col gap-2">
+          {result.map((item, i) => (
+            <div key={i} className="flex flex-col">
+              <a
+                href={item.link || item.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-purple-400 underline hover:text-blue-300"
+              >
+                {item.title}
+              </a>
+              {item.date && (
+                <span className="mt-1 text-xs text-gray-400">
+                  Published: {item.date}
+                </span>
+              )}
+            </div>
+          ))}
+        </div>
+      );
+    }
+    // Fallback: render as JSON
+    return (
+      <pre className="mt-1 overflow-x-auto rounded bg-green-900/60 p-2 text-green-100">
+        {JSON.stringify(result, null, 2)}
+      </pre>
+    );
+  }
+  return (
+    <div className="mb-4 rounded-lg border border-blue-500 bg-blue-950/60 p-4">
+      <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-blue-400">
+        Tool Call
+      </div>
+      <div className="mb-1 text-sm font-bold text-blue-300">
+        {toolInvocation.toolName}
+      </div>
+      <div className="text-xs text-blue-200">
+        <span className="font-mono">Args:</span>
+        <pre className="mt-1 overflow-x-auto rounded bg-blue-900/60 p-2 text-blue-100">
+          {JSON.stringify(toolInvocation.args, null, 2)}
+        </pre>
+      </div>
+      {toolInvocation.state === "result" && (
+        <div className="mt-3 text-xs text-green-200">
+          <span className="font-mono">Result:</span>
+          {renderResult(toolInvocation.result)}
+        </div>
+      )}
+    </div>
+  );
+}
+
+export const ChatMessage = ({ parts, role, userName }: ChatMessageProps) => {
   const isAI = role === "assistant";
 
   return (
@@ -53,7 +131,22 @@ export const ChatMessage = ({ text, role, userName }: ChatMessageProps) => {
         </p>
 
         <div className="prose prose-invert max-w-none">
-          <Markdown>{text}</Markdown>
+          {parts.map((part, idx) => {
+            // Hover over MessagePart to see all possible types!
+            if (part.type === "text") {
+              return <Markdown key={idx}>{part.text}</Markdown>;
+            }
+            if (part.type === "tool-invocation") {
+              return (
+                <ToolInvocationPart
+                  key={idx}
+                  toolInvocation={part.toolInvocation}
+                />
+              );
+            }
+            // You can add more handlers for other part types here
+            return null;
+          })}
         </div>
       </div>
     </div>
