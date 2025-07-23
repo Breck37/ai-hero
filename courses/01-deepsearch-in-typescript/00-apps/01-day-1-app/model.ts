@@ -7,3 +7,6 @@ export const model = google("gemini-2.0-flash-001");
 export const modelWithSearchGrounding = google("gemini-2.0-flash-001", {
   useSearchGrounding: true,
 });
+
+// Model for factuality evaluation (LLM-as-a-judge)
+export const factualityModel = google("gemini-1.5-flash");
