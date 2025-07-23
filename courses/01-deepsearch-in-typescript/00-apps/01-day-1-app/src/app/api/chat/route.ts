@@ -38,11 +38,42 @@ const getCurrentDateTime = () => {
 };
 
 export async function POST(request: Request) {
+  // Initialize Langfuse client
+  const langfuse = new Langfuse({
+    environment: env.NODE_ENV,
+  });
+
+  // Create a trace for this chat session (we'll update sessionId later)
+  const trace = langfuse.trace({
+    name: "chat",
+    userId: "unknown", // We'll update this after auth
+  });
+
+  // Database call: Authentication
+  const authSpan = trace.span({
+    name: "auth-check",
+    input: { requestMethod: "POST" },
+  });
+
   const session = await auth();
+
+  authSpan.end({
+    output: {
+      authenticated: !!session?.user,
+      userId: session?.user?.id || null,
+    },
+  });
 
   if (!session?.user) {
     return new Response("Unauthorized", { status: 401 });
   }
+
+  const userId = session.user.id;
+
+  // Update trace with actual userId
+  trace.update({
+    userId: session.user.id,
+  });
 
   const body = (await request.json()) as {
     messages: Array<Message>;
@@ -57,26 +88,35 @@ export async function POST(request: Request) {
     chatId,
     isNewChat = false,
   } = body;
-  const userId = session.user.id;
 
-  // Initialize Langfuse client
-  const langfuse = new Langfuse({
-    environment: env.NODE_ENV,
+  // Database call: Check if user is admin
+  const adminCheckSpan = trace.span({
+    name: "admin-check",
+    input: { userId },
   });
 
-  // Create a trace for this chat session
-  const trace = langfuse.trace({
-    sessionId: chatId,
-    name: "chat",
-    userId: session.user.id,
-  });
-
-  // Check if user is admin (admins bypass rate limits)
   const isAdmin = await isUserAdmin(userId);
 
+  adminCheckSpan.end({
+    output: { isAdmin },
+  });
+
   if (!isAdmin) {
-    // Check rate limit for non-admin users
+    // Database call: Check rate limit for non-admin users
+    const rateLimitSpan = trace.span({
+      name: "rate-limit-check",
+      input: { userId },
+    });
+
     const rateLimitCheck = await checkRateLimit(userId);
+
+    rateLimitSpan.end({
+      output: {
+        allowed: rateLimitCheck.allowed,
+        currentCount: rateLimitCheck.currentCount,
+        limit: rateLimitCheck.limit,
+      },
+    });
 
     if (!rateLimitCheck.allowed) {
       return new Response(
@@ -101,8 +141,17 @@ export async function POST(request: Request) {
     }
   }
 
-  // Record the request before processing
+  // Database call: Record the request before processing
+  const recordRequestSpan = trace.span({
+    name: "record-request",
+    input: { userId, requestType: "chat", useSearchGrounding },
+  });
+
   await recordRequest(userId, "chat", useSearchGrounding);
+
+  recordRequestSpan.end({
+    output: { success: true },
+  });
 
   // Generate a title from the first user message
   const firstUserMessage = messages.find((msg) => msg.role === "user");
@@ -111,13 +160,27 @@ export async function POST(request: Request) {
       (firstUserMessage.content.length > 50 ? "..." : "")
     : "New Chat";
 
-  // Create or update the chat immediately with the current messages
+  // Database call: Create or update the chat immediately with the current messages
   // This ensures we save the user's message even if the stream fails
+  const initialUpsertSpan = trace.span({
+    name: "upsert-chat-initial",
+    input: { userId, chatId, title, messageCount: messages.length },
+  });
+
   await upsertChat({
     userId,
     chatId,
     title,
     messages,
+  });
+
+  initialUpsertSpan.end({
+    output: { success: true },
+  });
+
+  // Update trace with actual sessionId now that we have the chatId
+  trace.update({
+    sessionId: chatId,
   });
 
   return createDataStreamResponse({
@@ -160,12 +223,26 @@ Always try to provide accurate, up-to-date information and cite your sources whe
               responseMessages,
             });
 
-            // Save the updated messages to the database
+            // Database call: Save the updated messages to the database
+            const finalUpsertSpan = trace.span({
+              name: "upsert-chat-final",
+              input: {
+                userId,
+                chatId,
+                title,
+                messageCount: updatedMessages.length,
+              },
+            });
+
             await upsertChat({
               userId,
               chatId,
               title,
               messages: updatedMessages,
+            });
+
+            finalUpsertSpan.end({
+              output: { success: true },
             });
 
             // Flush the trace to Langfuse
@@ -290,12 +367,26 @@ This workflow ensures you have complete information rather than just search snip
               responseMessages,
             });
 
-            // Save the updated messages to the database
+            // Database call: Save the updated messages to the database
+            const finalUpsertSpan = trace.span({
+              name: "upsert-chat-final",
+              input: {
+                userId,
+                chatId,
+                title,
+                messageCount: updatedMessages.length,
+              },
+            });
+
             await upsertChat({
               userId,
               chatId,
               title,
               messages: updatedMessages,
+            });
+
+            finalUpsertSpan.end({
+              output: { success: true },
             });
 
             // Flush the trace to Langfuse

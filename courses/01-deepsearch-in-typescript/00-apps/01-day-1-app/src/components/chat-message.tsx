@@ -70,7 +70,7 @@ function SourcePart({ source }: { source: any }) {
         href={source.url}
         target="_blank"
         rel="noopener noreferrer"
-        className="text-xs text-purple-200 underline hover:text-purple-100"
+        className="break-all text-xs text-purple-200 underline hover:text-purple-100"
       >
         {source.url}
       </a>
