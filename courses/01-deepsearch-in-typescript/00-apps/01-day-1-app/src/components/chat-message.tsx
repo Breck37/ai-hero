@@ -50,26 +50,59 @@ function ToolInvocationPart({
 }: {
   toolInvocation: ToolInvocation;
 }) {
+  const isSearchWeb = toolInvocation.toolName === "searchWeb";
+
   return (
     <div className="mb-4 rounded-lg border border-blue-500 bg-blue-950/60 p-4">
       <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-blue-400">
-        Tool Call
+        {toolInvocation.state === "partial-call" && "Searching..."}
+        {toolInvocation.state === "call" && "Search Complete"}
+        {toolInvocation.state === "result" && "Search Results"}
       </div>
+
       <div className="mb-1 text-sm font-bold text-blue-300">
-        {toolInvocation.toolName}
+        {isSearchWeb ? "🔍 Web Search" : toolInvocation.toolName}
       </div>
-      <div className="text-xs text-blue-200">
-        <span className="font-mono">Args:</span>
-        <pre className="mt-1 overflow-x-auto rounded bg-blue-900/60 p-2 text-blue-100">
-          {JSON.stringify(toolInvocation.args, null, 2)}
-        </pre>
-      </div>
-      {toolInvocation.state === "result" && (
-        <div className="mt-3 text-xs text-green-200">
-          <span className="font-mono">Result:</span>
-          <pre className="mt-1 overflow-x-auto rounded bg-green-900/60 p-2 text-green-100">
-            {JSON.stringify(toolInvocation.result, null, 2)}
-          </pre>
+
+      {toolInvocation.state !== "partial-call" && (
+        <div className="text-xs text-blue-200">
+          <span className="font-mono">Query:</span>
+          <div className="mt-1 rounded bg-blue-900/60 p-2 text-blue-100">
+            {toolInvocation.args.query}
+          </div>
+        </div>
+      )}
+
+      {toolInvocation.state === "result" && toolInvocation.result && (
+        <div className="mt-3">
+          <div className="mb-2 text-xs text-green-200">
+            <span className="font-mono">
+              Found {toolInvocation.result.length} results:
+            </span>
+          </div>
+          <div className="space-y-2">
+            {toolInvocation.result.map((result: any, index: number) => (
+              <div
+                key={index}
+                className="rounded border border-green-700/50 bg-green-900/30 p-3"
+              >
+                <a
+                  href={result.link}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="mb-1 block text-sm font-semibold text-green-300 underline hover:text-green-200"
+                >
+                  {result.title}
+                </a>
+                <p className="text-xs leading-relaxed text-green-100">
+                  {result.snippet}
+                </p>
+                <div className="mt-1 text-xs text-green-400 opacity-70">
+                  {result.link}
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
     </div>
@@ -93,9 +126,19 @@ export const ChatMessage = ({ parts, role, userName }: ChatMessageProps) => {
         <div className="prose prose-invert max-w-none">
           {parts.map((part, idx) => {
             // Hover over MessagePart to see all possible types!
+            //
+            // MessagePart can be:
+            // - TextUIPart: { type: "text"; text: string; }
+            // - ReasoningUIPart: { type: "reasoning"; reasoning: string; details: Array<...>; }
+            // - ToolInvocationUIPart: { type: "tool-invocation"; toolInvocation: ToolInvocation; }
+            // - SourceUIPart: { type: "source"; source: LanguageModelV1Source; }
+            // - FileUIPart: { type: "file"; mimeType: string; data: string; }
+            // - StepStartUIPart: { type: "step-start"; }
+
             if (part.type === "text") {
               return <Markdown key={idx}>{part.text}</Markdown>;
             }
+
             if (part.type === "tool-invocation") {
               return (
                 <ToolInvocationPart
@@ -104,7 +147,21 @@ export const ChatMessage = ({ parts, role, userName }: ChatMessageProps) => {
                 />
               );
             }
-            // You can add more handlers for other part types here
+
+            // You can add more handlers for other part types here:
+            // if (part.type === "reasoning") {
+            //   return <ReasoningPart key={idx} reasoning={part.reasoning} details={part.details} />;
+            // }
+            // if (part.type === "source") {
+            //   return <SourcePart key={idx} source={part.source} />;
+            // }
+            // if (part.type === "file") {
+            //   return <FilePart key={idx} mimeType={part.mimeType} data={part.data} />;
+            // }
+            // if (part.type === "step-start") {
+            //   return <StepStartPart key={idx} />;
+            // }
+
             return null;
           })}
         </div>
