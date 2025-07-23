@@ -14,19 +14,13 @@ evalite("Deep Search Eval", {
           },
         ],
       },
-      {
-        input: [
-          {
-            id: "2",
-            role: "user",
-            content: "What are the main features of Next.js 14?",
-          },
-        ],
-      },
     ];
   },
   task: async (input) => {
-    return askDeepSearch(input);
+    console.log("Starting evaluation at:", new Date().toISOString());
+    const result = await askDeepSearch(input);
+    console.log("Finished evaluation at:", new Date().toISOString());
+    return result;
   },
   scorers: [
     {

@@ -2,7 +2,7 @@ import type { Message } from "ai";
 import { createDataStreamResponse, appendResponseMessages } from "ai";
 import { auth } from "~/server/auth";
 import {
-  checkRateLimit,
+  checkRateLimit as checkUserRateLimit,
   recordRequest,
   isUserAdmin,
   upsertChat,
@@ -10,6 +10,7 @@ import {
 import { Langfuse } from "langfuse";
 import { env } from "~/env";
 import { streamFromDeepSearch } from "~/deep-search";
+import { checkRateLimit, recordRateLimit } from "~/server/rate-limit";
 
 export const maxDuration = 60;
 
@@ -84,7 +85,7 @@ export async function POST(request: Request) {
       input: { userId },
     });
 
-    const rateLimitCheck = await checkRateLimit(userId);
+    const rateLimitCheck = await checkUserRateLimit(userId);
 
     rateLimitSpan.end({
       output: {
@@ -168,6 +169,33 @@ export async function POST(request: Request) {
           chatId,
         });
       }
+
+      // Global rate limiting for LLM calls
+      const globalRateLimitConfig = {
+        maxRequests: 50, // For testing: only 1 request
+        windowMs: 60_000, // per 2 seconds
+        keyPrefix: "global_llm",
+        maxRetries: 3,
+      };
+
+      // Check the global rate limit
+      const globalRateLimitCheck = await checkRateLimit(globalRateLimitConfig);
+
+      if (!globalRateLimitCheck.allowed) {
+        console.log("Global rate limit exceeded, waiting...");
+        const isAllowed = await globalRateLimitCheck.retry();
+
+        // If the rate limit is still exceeded after retries, throw an error
+        if (!isAllowed) {
+          throw new Error("Global rate limit exceeded");
+        }
+      }
+
+      // Record the global rate limit
+      await recordRateLimit({
+        windowMs: globalRateLimitConfig.windowMs,
+        keyPrefix: globalRateLimitConfig.keyPrefix,
+      });
 
       const result = streamFromDeepSearch({
         messages,

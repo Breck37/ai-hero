@@ -3,6 +3,7 @@ import { z } from "zod";
 import { model, modelWithSearchGrounding } from "@/model";
 import { searchSerper } from "~/serper";
 import { bulkCrawlWebsites } from "~/scraper";
+import { checkRateLimit, recordRateLimit } from "~/server/rate-limit";
 
 // Helper function to get current date and time
 const getCurrentDateTime = () => {
@@ -151,6 +152,43 @@ This workflow ensures you have complete information rather than just search snip
 };
 
 export async function askDeepSearch(messages: Message[]) {
+  // Global rate limiting for LLM calls
+  const globalRateLimitConfig = {
+    maxRequests: 1, // For testing: only 1 request
+    windowMs: 20_000, // per 2 seconds
+    keyPrefix: "global_llm",
+    maxRetries: 3,
+  };
+
+  // Check the global rate limit
+  const globalRateLimitCheck = await checkRateLimit(globalRateLimitConfig);
+
+  if (!globalRateLimitCheck.allowed) {
+    console.log("Global rate limit exceeded, waiting...");
+    console.log("Current hits:", globalRateLimitCheck.totalHits);
+    console.log(
+      "Reset time:",
+      new Date(globalRateLimitCheck.resetTime).toISOString(),
+    );
+    const isAllowed = await globalRateLimitCheck.retry();
+
+    // If the rate limit is still exceeded after retries, throw an error
+    if (!isAllowed) {
+      throw new Error("Global rate limit exceeded");
+    }
+  } else {
+    console.log(
+      "Rate limit check passed. Remaining:",
+      globalRateLimitCheck.remaining,
+    );
+  }
+
+  // Record the global rate limit
+  await recordRateLimit({
+    windowMs: globalRateLimitConfig.windowMs,
+    keyPrefix: globalRateLimitConfig.keyPrefix,
+  });
+
   const result = streamFromDeepSearch({
     messages,
     onFinish: () => {}, // just a stub
