@@ -16,6 +16,7 @@ import {
 } from "~/server/db/queries";
 import { Langfuse } from "langfuse";
 import { env } from "~/env";
+import { bulkCrawlWebsites } from "~/scraper";
 
 export const maxDuration = 60;
 
@@ -171,9 +172,19 @@ Always try to search the web when:
 - Users ask for recommendations or reviews
 - Users ask about weather, sports scores, or other real-time data
 
-When you use the searchWeb tool, always cite your sources with inline links in the format [source name](link). For example: "According to [TechCrunch](https://techcrunch.com/...), the latest iPhone was released..."
+IMPORTANT WORKFLOW: After using searchWeb to find relevant URLs, you MUST use the scrapePages tool to extract the full content of the most relevant pages. This is essential for providing accurate and detailed responses.
 
-If you find multiple sources, cite the most relevant ones. Be concise but thorough in your responses.`,
+The scrapePages tool extracts the full markdown-formatted content of web pages, which you can then analyze and reference in your responses. Always cite the specific URLs you scrape from.
+
+WORKFLOW STEPS:
+1. Use searchWeb to find relevant URLs
+2. Use scrapePages to extract full content from the most relevant URLs (typically 2-3 URLs)
+3. Analyze the full content to provide detailed, accurate responses
+4. Cite your sources with inline links
+
+CRITICAL: Never provide responses based only on search snippets. You MUST use scrapePages to get the full content of articles before responding. This ensures accuracy and completeness.
+
+This workflow ensures you have complete information rather than just search snippets. Always follow this two-step process for comprehensive responses.`,
           experimental_telemetry: {
             isEnabled: true,
             functionId: `hero-agent`,
@@ -185,7 +196,11 @@ If you find multiple sources, cite the most relevant ones. Be concise but thorou
           tools: {
             searchWeb: {
               parameters: z.object({
-                query: z.string().describe("The query to search the web for"),
+                query: z
+                  .string()
+                  .describe(
+                    "The query to search the web for. After getting results, you MUST use scrapePages to extract full content.",
+                  ),
               }),
               execute: async ({ query }, { abortSignal }) => {
                 const results = await searchSerper(
@@ -204,6 +219,36 @@ If you find multiple sources, cite the most relevant ones. Be concise but thorou
                 }));
 
                 return mappedResults;
+              },
+            },
+            scrapePages: {
+              parameters: z.object({
+                urls: z
+                  .array(z.string())
+                  .describe(
+                    "Array of URLs to scrape for full content. Use this AFTER searchWeb to get complete article content.",
+                  ),
+              }),
+              execute: async ({ urls }, { abortSignal }) => {
+                const results = await bulkCrawlWebsites({ urls });
+
+                if (!results.success) {
+                  // Return an array with error information
+                  return results.results.map((r) => ({
+                    url: r.url,
+                    success: false,
+                    error: r.result.success ? "" : r.result.error,
+                    data: r.result.success ? r.result.data : "",
+                  }));
+                }
+
+                // Return an array of successful results
+                return results.results.map((r) => ({
+                  url: r.url,
+                  success: true,
+                  data: r.result.data,
+                  error: "",
+                }));
               },
             },
           },

@@ -90,24 +90,35 @@ function ToolInvocationPart({
   toolInvocation: ToolInvocation;
 }) {
   const isSearchWeb = toolInvocation.toolName === "searchWeb";
+  const isScrapePages = toolInvocation.toolName === "scrapePages";
 
   return (
     <div className="mb-4 rounded-lg border border-blue-500 bg-blue-950/60 p-4">
       <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-blue-400">
-        {toolInvocation.state === "partial-call" && "Searching..."}
-        {toolInvocation.state === "call" && "Search Complete"}
-        {toolInvocation.state === "result" && "Search Results"}
+        {toolInvocation.state === "partial-call" && "Processing..."}
+        {toolInvocation.state === "call" && "Complete"}
+        {toolInvocation.state === "result" && "Results"}
       </div>
 
       <div className="mb-1 text-sm font-bold text-blue-300">
-        {isSearchWeb ? "🔍 Web Search" : toolInvocation.toolName}
+        {isSearchWeb
+          ? "🔍 Web Search"
+          : isScrapePages
+            ? "📄 Page Scraping"
+            : toolInvocation.toolName}
       </div>
 
       {toolInvocation.state !== "partial-call" && (
         <div className="text-xs text-blue-200">
-          <span className="font-mono">Query:</span>
+          <span className="font-mono">
+            {isSearchWeb ? "Query:" : isScrapePages ? "URLs:" : "Args:"}
+          </span>
           <div className="mt-1 rounded bg-blue-900/60 p-2 text-blue-100">
-            {toolInvocation.args.query}
+            {isSearchWeb
+              ? toolInvocation.args.query
+              : isScrapePages
+                ? toolInvocation.args.urls.join(", ")
+                : JSON.stringify(toolInvocation.args)}
           </div>
         </div>
       )}
@@ -125,20 +136,61 @@ function ToolInvocationPart({
                 key={index}
                 className="rounded border border-green-700/50 bg-green-900/30 p-3"
               >
-                <a
-                  href={result.link}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="mb-1 block text-sm font-semibold text-green-300 underline hover:text-green-200"
-                >
-                  {result.title}
-                </a>
-                <p className="text-xs leading-relaxed text-green-100">
-                  {result.snippet}
-                </p>
-                <div className="mt-1 break-all text-xs text-green-400 opacity-70">
-                  {result.link}
-                </div>
+                {isSearchWeb ? (
+                  // Search Web results
+                  <>
+                    <a
+                      href={result.link}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="mb-1 block text-sm font-semibold text-green-300 underline hover:text-green-200"
+                    >
+                      {result.title}
+                    </a>
+                    <p className="text-xs leading-relaxed text-green-100">
+                      {result.snippet}
+                    </p>
+                    <div className="mt-1 break-all text-xs text-green-400 opacity-70">
+                      {result.link}
+                    </div>
+                  </>
+                ) : isScrapePages ? (
+                  // Scrape Pages results
+                  <>
+                    <a
+                      href={result.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="mb-1 block text-sm font-semibold text-green-300 underline hover:text-green-200"
+                    >
+                      {result.success
+                        ? "✅ Scraped Successfully"
+                        : "❌ Failed to Scrape"}
+                    </a>
+                    {result.success ? (
+                      <div className="mt-2">
+                        <div className="mb-1 text-xs text-green-400">
+                          Content Preview:
+                        </div>
+                        <div className="max-h-32 overflow-y-auto text-xs leading-relaxed text-green-100">
+                          {result.data.substring(0, 300)}...
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="text-xs text-red-300">
+                        Error: {result.error}
+                      </p>
+                    )}
+                    <div className="mt-1 break-all text-xs text-green-400 opacity-70">
+                      {result.url}
+                    </div>
+                  </>
+                ) : (
+                  // Generic tool results
+                  <div className="text-xs text-green-100">
+                    {JSON.stringify(result, null, 2)}
+                  </div>
+                )}
               </div>
             ))}
           </div>
