@@ -11,7 +11,8 @@ import type { Message } from "ai";
 interface ChatProps {
   userName: string;
   isAuthenticated: boolean;
-  chatId?: string;
+  chatId: string;
+  isNewChat: boolean;
   initialMessages?: Message[];
 }
 
@@ -27,6 +28,7 @@ export const ChatPage = ({
   userName,
   isAuthenticated,
   chatId,
+  isNewChat,
   initialMessages,
 }: ChatProps) => {
   const [useSearchGrounding, setUseSearchGrounding] = useState(false);
@@ -46,6 +48,7 @@ export const ChatPage = ({
     body: {
       useSearchGrounding,
       chatId,
+      isNewChat,
     },
     initialMessages,
     onError: (error) => {

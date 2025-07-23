@@ -157,15 +157,6 @@ export async function upsertChat(opts: {
   // Insert all messages
   if (messageList.length > 0) {
     const messageValues = messageList.map((message, index) => {
-      // Debug: log what we're storing
-      console.log("Storing message:", {
-        role: message.role,
-        content: message.content,
-        parts: message.parts,
-        partsType: typeof message.parts,
-        isArray: Array.isArray(message.parts),
-      });
-
       // Ensure we always have proper parts
       let messageParts;
       if (message.parts && Array.isArray(message.parts)) {
@@ -212,15 +203,6 @@ export async function getChat(chatId: string, userId: string) {
 
   // Convert messages back to the AI SDK format
   const aiMessages: Message[] = messageList.map((msg) => {
-    // Debug: log what we're getting from the database
-    console.log("Raw message from DB:", {
-      id: msg.id,
-      role: msg.role,
-      parts: msg.parts,
-      partsType: typeof msg.parts,
-      isArray: Array.isArray(msg.parts),
-    });
-
     // Ensure parts is always an array
     let messageParts;
     if (msg.parts && Array.isArray(msg.parts)) {

@@ -27,10 +27,16 @@ export async function POST(request: Request) {
   const body = (await request.json()) as {
     messages: Array<Message>;
     useSearchGrounding?: boolean;
-    chatId?: string;
+    chatId: string;
+    isNewChat?: boolean;
   };
 
-  const { messages, useSearchGrounding = false, chatId } = body;
+  const {
+    messages,
+    useSearchGrounding = false,
+    chatId,
+    isNewChat = false,
+  } = body;
   const userId = session.user.id;
 
   // Check if user is admin (admins bypass rate limits)
@@ -66,10 +72,6 @@ export async function POST(request: Request) {
   // Record the request before processing
   await recordRequest(userId, "chat", useSearchGrounding);
 
-  // Generate a chat ID if none provided
-  const finalChatId = chatId || crypto.randomUUID();
-  const isNewChat = !chatId;
-
   // Generate a title from the first user message
   const firstUserMessage = messages.find((msg) => msg.role === "user");
   const title = firstUserMessage?.content
@@ -81,7 +83,7 @@ export async function POST(request: Request) {
   // This ensures we save the user's message even if the stream fails
   await upsertChat({
     userId,
-    chatId: finalChatId,
+    chatId,
     title,
     messages,
   });
@@ -92,7 +94,7 @@ export async function POST(request: Request) {
       if (isNewChat) {
         dataStream.writeData({
           type: "NEW_CHAT_CREATED",
-          chatId: finalChatId,
+          chatId,
         });
       }
 
@@ -185,7 +187,7 @@ If you find multiple sources, cite the most relevant ones. Be concise but thorou
             // Save the updated messages to the database
             await upsertChat({
               userId,
-              chatId: finalChatId,
+              chatId,
               title,
               messages: updatedMessages,
             });
