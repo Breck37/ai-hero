@@ -121,7 +121,7 @@ export async function getUserRequestStats(userId: string): Promise<{
 export async function upsertChat(opts: {
   userId: string;
   chatId: string;
-  title: string;
+  title?: string;
   messages: Message[];
 }) {
   const { userId, chatId, title, messages: messageList } = opts;
@@ -137,20 +137,22 @@ export async function upsertChat(opts: {
     // Chat exists - delete all existing messages and replace them
     await db.delete(messages).where(eq(messages.chatId, chatId));
 
-    // Update the chat title and timestamp
-    await db
-      .update(chats)
-      .set({
-        title,
-        updatedAt: new Date(),
-      })
-      .where(eq(chats.id, chatId));
+    // Update the chat title and timestamp (only if title is provided)
+    const updateData: { updatedAt: Date; title?: string } = {
+      updatedAt: new Date(),
+    };
+
+    if (title) {
+      updateData.title = title;
+    }
+
+    await db.update(chats).set(updateData).where(eq(chats.id, chatId));
   } else {
     // Chat doesn't exist - create a new chat
     await db.insert(chats).values({
       id: chatId,
       userId,
-      title,
+      title: title || "New Chat",
     });
   }
 

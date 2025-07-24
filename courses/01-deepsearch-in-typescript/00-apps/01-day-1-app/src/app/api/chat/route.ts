@@ -12,6 +12,7 @@ import { env } from "~/env";
 import { streamFromDeepSearch } from "~/deep-search";
 import { checkRateLimit, recordRateLimit } from "~/server/rate-limit";
 import type { OurMessageAnnotation } from "~/run-agent-loop";
+import { generateChatTitle } from "~/generate-chat-title";
 
 export const maxDuration = 60;
 
@@ -131,24 +132,31 @@ export async function POST(request: Request) {
     output: { success: true },
   });
 
-  // Generate a title from the first user message
-  const firstUserMessage = messages.find((msg) => msg.role === "user");
-  const title = firstUserMessage?.content
-    ? firstUserMessage.content.slice(0, 50) +
-      (firstUserMessage.content.length > 50 ? "..." : "")
-    : "New Chat";
+  // Set up title generation for new chats
+  let titlePromise: Promise<string> | undefined;
+
+  if (isNewChat) {
+    titlePromise = generateChatTitle(messages);
+  } else {
+    titlePromise = Promise.resolve("");
+  }
 
   // Database call: Create or update the chat immediately with the current messages
   // This ensures we save the user's message even if the stream fails
   const initialUpsertSpan = trace.span({
     name: "upsert-chat-initial",
-    input: { userId, chatId, title, messageCount: messages.length },
+    input: {
+      userId,
+      chatId,
+      title: "Generating...",
+      messageCount: messages.length,
+    },
   });
 
   await upsertChat({
     userId,
     chatId,
-    title,
+    title: "Generating...",
     messages,
   });
 
@@ -231,13 +239,16 @@ export async function POST(request: Request) {
             lastMessage.annotations = annotations as any;
           }
 
+          // Resolve the title promise if it exists
+          const title = titlePromise ? await titlePromise : undefined;
+
           // Database call: Save the updated messages to the database
           const finalUpsertSpan = trace.span({
             name: "upsert-chat-final",
             input: {
               userId,
               chatId,
-              title,
+              title: title || "Chat",
               messageCount: updatedMessages.length,
             },
           });
@@ -245,7 +256,7 @@ export async function POST(request: Request) {
           await upsertChat({
             userId,
             chatId,
-            title,
+            ...(title ? { title } : {}), // Only save the title if it's not empty
             messages: updatedMessages,
           });
 
