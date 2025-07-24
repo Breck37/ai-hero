@@ -79,6 +79,7 @@ You have native search grounding capabilities, so you'll automatically search wh
       lastMessage.content,
       opts.onFinish,
       opts.writeMessageAnnotation,
+      opts.telemetry.metadata?.langfuseTraceId?.toString(),
     );
   }
 };

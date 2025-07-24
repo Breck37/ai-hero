@@ -117,9 +117,10 @@ export const answerQuestion = (
   options: {
     isFinal?: boolean;
     onFinish?: Parameters<typeof streamText>[0]["onFinish"];
+    langfuseTraceId?: string;
   } = {},
 ): StreamTextResult<{}, string> => {
-  const { isFinal = false, onFinish } = options;
+  const { isFinal = false, onFinish, langfuseTraceId } = options;
 
   const systemPrompt = `You are a knowledgeable friend who provides accurate, well-researched answers based on web search results and scraped content. Your responses should feel like chatting with a smart friend who really knows their stuff!
 
@@ -205,9 +206,18 @@ Please provide a comprehensive answer to the user's question based on the inform
       markdownJoinerTransform,
       smoothStream({
         delayInMs: 20,
-        chunking: "word",
+        chunking: "line",
       }),
     ],
+    experimental_telemetry: langfuseTraceId
+      ? {
+          isEnabled: true,
+          functionId: isFinal ? "agent-answer-final" : "agent-answer-question",
+          metadata: {
+            langfuseTraceId,
+          },
+        }
+      : undefined,
     onFinish,
   });
 };

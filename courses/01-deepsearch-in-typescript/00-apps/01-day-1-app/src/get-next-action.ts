@@ -48,7 +48,10 @@ export const actionSchema = z.object({
     .optional(),
 });
 
-export const getNextAction = async (context: SystemContext) => {
+export const getNextAction = async (
+  context: SystemContext,
+  langfuseTraceId?: string,
+) => {
   const result = await generateObject({
     model,
     schema: actionSchema,
@@ -91,6 +94,15 @@ ${context.getQueryHistory()}
 
 ${context.getScrapeHistory()}
     `,
+    experimental_telemetry: langfuseTraceId
+      ? {
+          isEnabled: true,
+          functionId: "agent-get-next-action",
+          metadata: {
+            langfuseTraceId,
+          },
+        }
+      : undefined,
   });
 
   return result.object;
