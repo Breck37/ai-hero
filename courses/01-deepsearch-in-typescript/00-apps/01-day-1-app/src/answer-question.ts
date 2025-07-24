@@ -199,7 +199,7 @@ Please provide a comprehensive answer to the user's question based on the inform
       markdownJoinerTransform,
       smoothStream({
         delayInMs: 20,
-        chunking: "line",
+        chunking: "word",
       }),
     ],
   });
