@@ -1,4 +1,4 @@
-import { type StreamTextResult, streamText } from "ai";
+import { type StreamTextResult, type Message, streamText } from "ai";
 import { SystemContext } from "./system-context";
 import { getNextAction, type Action } from "./get-next-action";
 import { answerQuestion } from "./answer-question";
@@ -58,13 +58,13 @@ const scrapeUrl = async (urls: string[]) => {
 };
 
 export const runAgentLoop = async (
-  userQuestion: string,
+  messages: Message[],
   onFinish?: Parameters<typeof streamText>[0]["onFinish"],
   writeMessageAnnotation?: (annotation: OurMessageAnnotation) => void,
   langfuseTraceId?: string,
 ): Promise<StreamTextResult<{}, string>> => {
   // A persistent container for the state of our system
-  const ctx = new SystemContext(userQuestion);
+  const ctx = new SystemContext(messages);
 
   // A loop that continues until we have an answer
   // or we've taken 10 actions

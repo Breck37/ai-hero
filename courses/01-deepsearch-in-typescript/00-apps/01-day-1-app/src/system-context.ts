@@ -1,3 +1,5 @@
+import type { Message } from "ai";
+
 type QueryResultSearchResult = {
   date: string;
   title: string;
@@ -25,9 +27,9 @@ export class SystemContext {
   private step = 0;
 
   /**
-   * The user's original question
+   * The full message history
    */
-  private userQuestion: string;
+  private messages: Message[];
 
   /**
    * The history of all queries searched
@@ -39,8 +41,8 @@ export class SystemContext {
    */
   private scrapeHistory: ScrapeResult[] = [];
 
-  constructor(userQuestion: string) {
-    this.userQuestion = userQuestion;
+  constructor(messages: Message[]) {
+    this.messages = messages;
   }
 
   shouldStop() {
@@ -56,7 +58,22 @@ export class SystemContext {
   }
 
   getUserQuestion() {
-    return this.userQuestion;
+    // Get the last user message
+    const lastUserMessage = this.messages
+      .slice()
+      .reverse()
+      .find((msg) => msg.role === "user");
+    return lastUserMessage?.content || "";
+  }
+
+  getConversationHistory(): string {
+    // Format the conversation history for the LLM
+    return this.messages
+      .map((msg) => {
+        const role = msg.role === "user" ? "User" : "Assistant";
+        return `${role}: ${msg.content}`;
+      })
+      .join("\n\n");
   }
 
   hasSearchResults() {

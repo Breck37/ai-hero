@@ -71,12 +71,8 @@ You have native search grounding capabilities, so you'll automatically search wh
     );
   } else {
     // Use the new agent loop
-    const lastMessage = opts.messages[opts.messages.length - 1];
-    if (!lastMessage || !lastMessage.content) {
-      throw new Error("No valid message content found");
-    }
     return runAgentLoop(
-      lastMessage.content,
+      opts.messages,
       opts.onFinish,
       opts.writeMessageAnnotation,
       opts.telemetry.metadata?.langfuseTraceId?.toString(),

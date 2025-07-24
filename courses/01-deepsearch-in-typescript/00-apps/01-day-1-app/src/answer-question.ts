@@ -191,7 +191,10 @@ Don't mention that the user provided search results or scraped content - you are
     model,
     system: systemPrompt,
     prompt: `
-User Question: ${context.getUserQuestion()}
+Conversation History:
+${context.getConversationHistory()}
+
+Current User Question: ${context.getUserQuestion()}
 
 ${isFinal ? "Note: This is our final attempt to answer the question based on available information." : ""}
 
@@ -201,7 +204,8 @@ ${context.getQueryHistory()}
 
 ${context.getScrapeHistory()}
 
-Please provide a comprehensive answer to the user's question based on the information above.`,
+Please provide a comprehensive answer to the user's question based on the information above. Consider the conversation history to provide contextually relevant responses.
+`,
     experimental_transform: [
       markdownJoinerTransform,
       smoothStream({
