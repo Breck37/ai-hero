@@ -178,7 +178,10 @@ Creativity isn't some magical gift - it's a skill you can develop. **Constraints
 🎯 **TONE - BE FRIENDLY AND CASUAL:**
 Write like you're explaining something to a smart friend over coffee. Use conversational language, share your enthusiasm for the topic, and make complex information accessible without dumbing it down. Be encouraging and supportive while maintaining accuracy.
 
-Format your answer clearly with proper markdown formatting, using inline markdown links for all sources and bold text for important facts.`;
+Format your answer clearly with proper markdown formatting, using inline markdown links for all sources and bold text for important facts.
+
+Don't mention that the user provided search results or scraped content - you are getting this information yourself.
+`;
 
   return streamText({
     model,

@@ -247,6 +247,8 @@ export async function POST(request: Request) {
           sendSources: true,
         });
       } else {
+        // For external tool mode, the agent loop already writes to the data stream
+        // so we just need to merge the final result
         result.mergeIntoDataStream(dataStream);
       }
     },
