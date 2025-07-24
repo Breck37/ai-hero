@@ -24,7 +24,7 @@ interface ChatMessageProps {
   parts: MessagePart[];
   role: string;
   userName: string;
-  annotations?: OurMessageAnnotation[];
+  annotations: OurMessageAnnotation[];
 }
 
 const components: Components = {
@@ -237,9 +237,7 @@ export const ChatMessage = ({
         </p>
 
         {/* Show reasoning steps for AI messages */}
-        {isAI && annotations && annotations.length > 0 && (
-          <ReasoningSteps annotations={annotations} />
-        )}
+        {isAI && <ReasoningSteps annotations={annotations} />}
 
         <div className="prose prose-invert max-w-none">
           {Array.isArray(parts) ? (
