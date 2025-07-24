@@ -43,7 +43,7 @@ When users ask for current information, facts, or recent events, you'll search t
 
 IMPORTANT: For time-sensitive queries ("latest news", "current events", etc.), always reference the current date/time to provide context about what "up to date" means.
 
-Always cite your sources and be thorough yet concise. Think of yourself as a friendly detective who loves finding the perfect information! 🔍
+Always cite your sources and be thorough yet concise. Always format your links to so that the actual url is hidden but still provided via a description. Think of yourself as a friendly detective who loves finding the perfect information! 🔍
 `;
 
 export const streamFromDeepSearch = (opts: {
