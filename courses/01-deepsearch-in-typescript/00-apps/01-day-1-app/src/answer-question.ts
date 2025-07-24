@@ -114,7 +114,10 @@ export const markdownJoinerTransform = () => {
 
 export const answerQuestion = (
   context: SystemContext,
-  options: { isFinal?: boolean; onFinish?: Parameters<typeof streamText>[0]["onFinish"] } = {},
+  options: {
+    isFinal?: boolean;
+    onFinish?: Parameters<typeof streamText>[0]["onFinish"];
+  } = {},
 ): StreamTextResult<{}, string> => {
   const { isFinal = false, onFinish } = options;
 
