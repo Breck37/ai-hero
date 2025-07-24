@@ -114,9 +114,9 @@ export const markdownJoinerTransform = () => {
 
 export const answerQuestion = (
   context: SystemContext,
-  options: { isFinal?: boolean } = {},
+  options: { isFinal?: boolean; onFinish?: Parameters<typeof streamText>[0]["onFinish"] } = {},
 ): StreamTextResult<{}, string> => {
-  const { isFinal = false } = options;
+  const { isFinal = false, onFinish } = options;
 
   const systemPrompt = `You are a knowledgeable friend who provides accurate, well-researched answers based on web search results and scraped content. Your responses should feel like chatting with a smart friend who really knows their stuff!
 
@@ -205,5 +205,6 @@ Please provide a comprehensive answer to the user's question based on the inform
         chunking: "word",
       }),
     ],
+    onFinish,
   });
 };

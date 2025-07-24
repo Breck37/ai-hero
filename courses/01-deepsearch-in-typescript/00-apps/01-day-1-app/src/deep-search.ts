@@ -74,7 +74,7 @@ You have native search grounding capabilities, so you'll automatically search wh
     if (!lastMessage || !lastMessage.content) {
       throw new Error("No valid message content found");
     }
-    return runAgentLoop(lastMessage.content);
+    return runAgentLoop(lastMessage.content, opts.onFinish);
   }
 };
 

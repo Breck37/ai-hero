@@ -1,4 +1,4 @@
-import { type StreamTextResult } from "ai";
+import { type StreamTextResult, streamText } from "ai";
 import { SystemContext } from "./system-context";
 import { getNextAction, type Action } from "./get-next-action";
 import { answerQuestion } from "./answer-question";
@@ -54,6 +54,7 @@ const scrapeUrl = async (urls: string[]) => {
 
 export const runAgentLoop = async (
   userQuestion: string,
+  onFinish?: Parameters<typeof streamText>[0]["onFinish"],
 ): Promise<StreamTextResult<{}, string>> => {
   // A persistent container for the state of our system
   const ctx = new SystemContext(userQuestion);
@@ -99,7 +100,7 @@ export const runAgentLoop = async (
 
       ctx.reportScrapes(scrapeResult);
     } else if (nextAction.type === "answer") {
-      return answerQuestion(ctx);
+      return answerQuestion(ctx, { onFinish });
     }
 
     // We increment the step counter
@@ -108,5 +109,5 @@ export const runAgentLoop = async (
 
   // If we've taken 10 actions and still don't have an answer,
   // we ask the LLM to give its best attempt at an answer
-  return answerQuestion(ctx, { isFinal: true });
+  return answerQuestion(ctx, { isFinal: true, onFinish });
 };
