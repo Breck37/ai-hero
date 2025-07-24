@@ -207,6 +207,9 @@ export async function POST(request: Request) {
             langfuseTraceId: trace.id,
           },
         },
+        writeMessageAnnotation: (annotation) => {
+          dataStream.writeMessageAnnotation(annotation as any);
+        },
         onFinish: async ({ response }) => {
           const responseMessages = response.messages;
 

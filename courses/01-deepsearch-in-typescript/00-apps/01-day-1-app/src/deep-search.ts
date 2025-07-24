@@ -6,7 +6,7 @@ import {
 } from "ai";
 import { modelWithSearchGrounding } from "@/model";
 import { checkRateLimit, recordRateLimit } from "~/server/rate-limit";
-import { runAgentLoop } from "./run-agent-loop";
+import { runAgentLoop, type OurMessageAnnotation } from "./run-agent-loop";
 
 // Helper function to get current date and time
 const getCurrentDateTime = () => {
@@ -51,6 +51,7 @@ export const streamFromDeepSearch = (opts: {
   onFinish: Parameters<typeof streamText>[0]["onFinish"];
   telemetry: TelemetrySettings;
   useSearchGrounding?: boolean;
+  writeMessageAnnotation?: (annotation: OurMessageAnnotation) => void;
 }): Promise<StreamTextResult<{}, string>> => {
   const currentDateTime = getCurrentDateTime();
   const basePrompt = getBaseSystemPrompt(currentDateTime);
@@ -74,7 +75,11 @@ You have native search grounding capabilities, so you'll automatically search wh
     if (!lastMessage || !lastMessage.content) {
       throw new Error("No valid message content found");
     }
-    return runAgentLoop(lastMessage.content, opts.onFinish);
+    return runAgentLoop(
+      lastMessage.content,
+      opts.onFinish,
+      opts.writeMessageAnnotation,
+    );
   }
 };
 

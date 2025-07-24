@@ -6,6 +6,11 @@ import { searchSerper } from "./serper";
 import { bulkCrawlWebsites } from "./scraper";
 import { env } from "./env";
 
+export type OurMessageAnnotation = {
+  type: "NEW_ACTION";
+  action: Action;
+};
+
 // Copy of the search function from deep-search.ts
 const searchWeb = async (query: string) => {
   const results = await searchSerper(
@@ -55,6 +60,7 @@ const scrapeUrl = async (urls: string[]) => {
 export const runAgentLoop = async (
   userQuestion: string,
   onFinish?: Parameters<typeof streamText>[0]["onFinish"],
+  writeMessageAnnotation?: (annotation: OurMessageAnnotation) => void,
 ): Promise<StreamTextResult<{}, string>> => {
   // A persistent container for the state of our system
   const ctx = new SystemContext(userQuestion);
@@ -64,6 +70,14 @@ export const runAgentLoop = async (
   while (!ctx.shouldStop()) {
     // We choose the next action based on the state of our system
     const nextAction = await getNextAction(ctx);
+
+    // Send annotation about the action that was chosen
+    if (writeMessageAnnotation) {
+      writeMessageAnnotation({
+        type: "NEW_ACTION",
+        action: nextAction as Action,
+      } satisfies OurMessageAnnotation);
+    }
 
     // We execute the action and update the state of our system
     if (nextAction.type === "search") {
