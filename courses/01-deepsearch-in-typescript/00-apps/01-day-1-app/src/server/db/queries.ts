@@ -171,6 +171,7 @@ export async function upsertChat(opts: {
         chatId,
         role: message.role,
         parts: messageParts,
+        annotations: message.annotations || null,
         order: index,
       };
     });
@@ -219,6 +220,7 @@ export async function getChat(chatId: string, userId: string) {
       id: msg.id,
       role: msg.role as "user" | "assistant",
       parts: messageParts,
+      annotations: Array.isArray(msg.annotations) ? msg.annotations : undefined,
       content: "",
     };
   });

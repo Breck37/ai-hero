@@ -11,6 +11,7 @@ import { Langfuse } from "langfuse";
 import { env } from "~/env";
 import { streamFromDeepSearch } from "~/deep-search";
 import { checkRateLimit, recordRateLimit } from "~/server/rate-limit";
+import type { OurMessageAnnotation } from "~/run-agent-loop";
 
 export const maxDuration = 60;
 
@@ -162,6 +163,9 @@ export async function POST(request: Request) {
 
   return createDataStreamResponse({
     execute: async (dataStream) => {
+      // Collect annotations for the current message
+      const annotations: OurMessageAnnotation[] = [];
+
       // Send new chat ID if this is a new chat
       if (isNewChat) {
         dataStream.writeData({
@@ -208,6 +212,9 @@ export async function POST(request: Request) {
           },
         },
         writeMessageAnnotation: (annotation) => {
+          // Save the annotation in-memory
+          annotations.push(annotation);
+          // Send it to the client
           dataStream.writeMessageAnnotation(annotation as any);
         },
         onFinish: async ({ response }) => {
@@ -217,6 +224,12 @@ export async function POST(request: Request) {
             messages,
             responseMessages,
           });
+
+          // Add annotations to the last message (the AI response)
+          const lastMessage = updatedMessages[updatedMessages.length - 1];
+          if (lastMessage && annotations.length > 0) {
+            lastMessage.annotations = annotations as any;
+          }
 
           // Database call: Save the updated messages to the database
           const finalUpsertSpan = trace.span({
