@@ -1,10 +1,12 @@
-import { streamText, type Message, type TelemetrySettings } from "ai";
-import { z } from "zod";
-import { model, modelWithSearchGrounding } from "@/model";
-import { searchSerper } from "~/serper";
-import { bulkCrawlWebsites } from "~/scraper";
+import {
+  streamText,
+  type Message,
+  type TelemetrySettings,
+  type StreamTextResult,
+} from "ai";
+import { modelWithSearchGrounding } from "@/model";
 import { checkRateLimit, recordRateLimit } from "~/server/rate-limit";
-import { env } from "~/env";
+import { runAgentLoop } from "./run-agent-loop";
 
 // Helper function to get current date and time
 const getCurrentDateTime = () => {
@@ -41,7 +43,7 @@ When users ask for current information, facts, or recent events, you'll search t
 
 IMPORTANT: For time-sensitive queries ("latest news", "current events", etc.), always reference the current date/time to provide context about what "up to date" means.
 
-Always cite your sources and be thorough yet concise. Think of yourself as a friendly detective who loves finding the perfect information! 🔍
+Always cite your sources and be thorough yet concise. Always format your links to so that the actual url is hidden but still provided via a description. Think of yourself as a friendly detective who loves finding the perfect information! 🔍
 `;
 
 export const streamFromDeepSearch = (opts: {
@@ -49,108 +51,30 @@ export const streamFromDeepSearch = (opts: {
   onFinish: Parameters<typeof streamText>[0]["onFinish"];
   telemetry: TelemetrySettings;
   useSearchGrounding?: boolean;
-}) => {
+}): Promise<StreamTextResult<{}, string>> => {
   const currentDateTime = getCurrentDateTime();
   const basePrompt = getBaseSystemPrompt(currentDateTime);
 
   if (opts.useSearchGrounding) {
     // Use search grounding (native model search)
-    return streamText({
-      model: modelWithSearchGrounding,
-      messages: opts.messages,
-      system: `${basePrompt}
+    return Promise.resolve(
+      streamText({
+        model: modelWithSearchGrounding,
+        messages: opts.messages,
+        system: `${basePrompt}
 
 You have native search grounding capabilities, so you'll automatically search when needed. No need to manually trigger searches - just focus on being helpful and accurate! 🎯`,
-      experimental_telemetry: opts.telemetry,
-      onFinish: opts.onFinish,
-    });
+        experimental_telemetry: opts.telemetry,
+        onFinish: opts.onFinish,
+      }),
+    );
   } else {
-    // Use external search tool
-    return streamText({
-      model,
-      messages: opts.messages,
-      system: `${basePrompt}
-
-🔧 SEARCH WORKFLOW (2-step process):
-1. Use searchWeb to find relevant URLs (aim for 2+ sources)
-2. Use scrapePages to extract full content from the best URLs
-
-💡 Search when users ask about:
-• Current events, news, or recent developments
-• Time-sensitive factual information  
-• Specific products, companies, or people
-• Recommendations or reviews
-• Weather, sports, or real-time data
-
-⚡ CRITICAL: Never rely on search snippets alone! Always use scrapePages to get full article content for accuracy and completeness.
-
-🎯 PRO TIP: Cite sources with inline links and provide details from multiple perspectives when possible!`,
-      experimental_telemetry: opts.telemetry,
-      maxSteps: 10,
-      tools: {
-        searchWeb: {
-          parameters: z.object({
-            query: z
-              .string()
-              .describe(
-                "The query to search the web for. After getting results, you MUST use scrapePages to extract full content.",
-              ),
-          }),
-          execute: async ({ query }, { abortSignal }) => {
-            const results = await searchSerper(
-              { q: query, num: env.SEARCH_RESULTS_COUNT },
-              abortSignal,
-            );
-
-            const mappedResults: Array<{
-              title: string;
-              link: string;
-              snippet: string;
-              date?: string;
-            }> = results.organic.map((result) => ({
-              title: result.title,
-              link: result.link,
-              snippet: result.snippet,
-              date: result.date,
-            }));
-
-            return mappedResults;
-          },
-        },
-        scrapePages: {
-          parameters: z.object({
-            urls: z
-              .array(z.string())
-              .describe(
-                "Array of URLs to scrape for full content. Use this AFTER searchWeb to get complete article content.",
-              ),
-          }),
-          execute: async ({ urls }, { abortSignal }) => {
-            const results = await bulkCrawlWebsites({ urls });
-
-            if (!results.success) {
-              // Return an array with error information
-              return results.results.map((r) => ({
-                url: r.url,
-                success: false,
-                error: r.result.success ? "" : r.result.error,
-                data: r.result.success ? r.result.data : "",
-              }));
-            }
-
-            // Return an array of successful results
-            return results.results.map((r) => ({
-              url: r.url,
-              success: true,
-              data: r.result.data,
-              date: r.result.date,
-              error: "",
-            }));
-          },
-        },
-      },
-      onFinish: opts.onFinish,
-    });
+    // Use the new agent loop
+    const lastMessage = opts.messages[opts.messages.length - 1];
+    if (!lastMessage || !lastMessage.content) {
+      throw new Error("No valid message content found");
+    }
+    return runAgentLoop(lastMessage.content, opts.onFinish);
   }
 };
 
@@ -192,7 +116,7 @@ export async function askDeepSearch(messages: Message[]) {
     keyPrefix: globalRateLimitConfig.keyPrefix,
   });
 
-  const result = streamFromDeepSearch({
+  const result = await streamFromDeepSearch({
     messages,
     onFinish: () => {}, // just a stub
     telemetry: {
