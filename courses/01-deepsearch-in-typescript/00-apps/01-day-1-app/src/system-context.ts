@@ -1,3 +1,6 @@
+import type { Message } from "ai";
+import type { LocationHints } from "./types";
+
 type QueryResultSearchResult = {
   date: string;
   title: string;
@@ -25,9 +28,9 @@ export class SystemContext {
   private step = 0;
 
   /**
-   * The user's original question
+   * The full message history
    */
-  private userQuestion: string;
+  private messages: Message[];
 
   /**
    * The history of all queries searched
@@ -39,8 +42,14 @@ export class SystemContext {
    */
   private scrapeHistory: ScrapeResult[] = [];
 
-  constructor(userQuestion: string) {
-    this.userQuestion = userQuestion;
+  /**
+   * User location information
+   */
+  private locationHints?: LocationHints;
+
+  constructor(messages: Message[], locationHints?: LocationHints) {
+    this.messages = messages;
+    this.locationHints = locationHints;
   }
 
   shouldStop() {
@@ -56,7 +65,22 @@ export class SystemContext {
   }
 
   getUserQuestion() {
-    return this.userQuestion;
+    // Get the last user message
+    const lastUserMessage = this.messages
+      .slice()
+      .reverse()
+      .find((msg) => msg.role === "user");
+    return lastUserMessage?.content || "";
+  }
+
+  getConversationHistory(): string {
+    // Format the conversation history for the LLM
+    return this.messages
+      .map((msg) => {
+        const role = msg.role === "user" ? "User" : "Assistant";
+        return `${role}: ${msg.content}`;
+      })
+      .join("\n\n");
   }
 
   hasSearchResults() {
@@ -97,5 +121,22 @@ export class SystemContext {
         ].join("\n\n"),
       )
       .join("\n\n");
+  }
+
+  getLocationHints(): LocationHints | undefined {
+    return this.locationHints;
+  }
+
+  getLocationPrompt(): string {
+    if (!this.locationHints) {
+      return "";
+    }
+
+    return `USER LOCATION:
+- City: ${this.locationHints.city || "Unknown"}
+- Country: ${this.locationHints.country || "Unknown"}
+- Coordinates: ${this.locationHints.latitude || "Unknown"}, ${this.locationHints.longitude || "Unknown"}
+
+When users ask for location-based information (restaurants, weather, local events, etc.), use their location to provide relevant results.`;
   }
 }

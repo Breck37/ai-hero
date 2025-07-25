@@ -6,15 +6,21 @@ import type { SystemContext } from "./system-context";
 export interface SearchAction {
   type: "search";
   query: string;
+  title: string;
+  reasoning: string;
 }
 
 export interface ScrapeAction {
   type: "scrape";
   urls: string[];
+  title: string;
+  reasoning: string;
 }
 
 export interface AnswerAction {
   type: "answer";
+  title: string;
+  reasoning: string;
 }
 
 export type Action = SearchAction | ScrapeAction | AnswerAction;
@@ -26,6 +32,12 @@ export const actionSchema = z.object({
       - 'scrape': Scrape a URL.
       - 'answer': Answer the user's question and complete the loop.`,
   ),
+  title: z
+    .string()
+    .describe(
+      "The title of the action, to be displayed in the UI. Be extremely concise. 'Searching Saka's injury history', 'Checking HMRC industrial action', 'Comparing toaster ovens'",
+    ),
+  reasoning: z.string().describe("The reason you chose this step."),
   query: z
     .string()
     .describe("The query to search for. Required if type is 'search'.")
@@ -36,11 +48,16 @@ export const actionSchema = z.object({
     .optional(),
 });
 
-export const getNextAction = async (context: SystemContext) => {
+export const getNextAction = async (
+  context: SystemContext,
+  langfuseTraceId?: string,
+) => {
   const result = await generateObject({
     model,
     schema: actionSchema,
     system: `You are a helpful assistant that can search the web, scrape a URL, or answer the user's question.
+
+${context.getLocationPrompt()}
 
 🔧 MANDATORY SEARCH WORKFLOW:
 1. FIRST: Use 'search' to find relevant URLs (aim for 2+ sources)
@@ -53,32 +70,48 @@ export const getNextAction = async (context: SystemContext) => {
 • Specific products, companies, or people
 • Recommendations or reviews
 • Weather, sports, or real-time data
+• Location-based queries (restaurants, events, services near the user)
 
 ⚡ CRITICAL RULES:
 - NEVER answer without first searching AND scraping
 - Search snippets are NOT enough - you MUST scrape the full content
 - Always follow the 3-step process: search → scrape → answer
 - If you have search results but no scraped content, you MUST scrape next
+- Consider the conversation history when making decisions - follow-up questions should build on previous context
+- For location-based queries, include the user's location in your search terms
 
 🎯 PRO TIP: Cite sources with inline links and provide details from multiple perspectives when possible!`,
     prompt: `
-User Question: ${context.getUserQuestion()}
+Conversation History:
+${context.getConversationHistory()}
+
+Current User Question: ${context.getUserQuestion()}
 
 DECISION RULES:
 - If you have NO search results yet → use 'search'
 - If you have search results but NO scraped content → use 'scrape' with URLs from your search results
 - If you have BOTH search results AND scraped content → use 'answer'
+- For follow-up questions, consider if you need to search for more specific information
 
 Current state:
 - Search results: ${context.hasSearchResults() ? "Available" : "None"}
 - Scraped content: ${context.hasScrapedContent() ? "Available" : "None"}
 
-Here is the context:
+Here is the research context:
 
 ${context.getQueryHistory()}
 
 ${context.getScrapeHistory()}
     `,
+    experimental_telemetry: langfuseTraceId
+      ? {
+          isEnabled: true,
+          functionId: "agent-get-next-action",
+          metadata: {
+            langfuseTraceId,
+          },
+        }
+      : undefined,
   });
 
   return result.object;

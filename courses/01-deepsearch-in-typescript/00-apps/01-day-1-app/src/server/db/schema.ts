@@ -192,6 +192,7 @@ export const messages = createTable(
       .references(() => chats.id, { onDelete: "cascade" }),
     role: varchar("role", { length: 255 }).notNull(), // "user" or "assistant"
     parts: json("parts").notNull(), // JSON array of message parts
+    annotations: json("annotations"), // JSON array of message annotations (optional)
     order: integer("order").notNull(), // Order of message in the chat
     createdAt: timestamp("created_at", {
       mode: "date",
