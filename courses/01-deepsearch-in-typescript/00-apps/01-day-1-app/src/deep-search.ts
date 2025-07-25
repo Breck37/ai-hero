@@ -7,6 +7,7 @@ import {
 import { modelWithSearchGrounding } from "@/model";
 import { checkRateLimit, recordRateLimit } from "~/server/rate-limit";
 import { runAgentLoop, type OurMessageAnnotation } from "./run-agent-loop";
+import type { LocationHints } from "./types";
 
 // Helper function to get current date and time
 const getCurrentDateTime = () => {
@@ -52,7 +53,7 @@ export const streamFromDeepSearch = (opts: {
   telemetry: TelemetrySettings;
   useSearchGrounding?: boolean;
   writeMessageAnnotation: (annotation: OurMessageAnnotation) => void;
-  locationHints?: import("./types").LocationHints;
+  locationHints?: LocationHints;
   chatId?: string;
   userId?: string;
 }): Promise<StreamTextResult<{}, string>> => {

@@ -249,6 +249,7 @@ export async function POST(request: Request) {
               langfuseTraceId: trace.id,
             },
           },
+          locationHints: requestHints,
           writeMessageAnnotation: (annotation) => {
             // Save the annotation in-memory
             annotations.push(annotation);

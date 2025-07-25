@@ -87,14 +87,89 @@ export const runAgentLoop = async ({
   // A loop that continues until we have an answer
   // or we've taken 10 actions
   while (!ctx.shouldStop()) {
-    // First, determine if we should continue searching or answer
-    const nextAction = await getNextAction(ctx, langfuseTraceId);
+    // 1. Run the query rewriter
+    const queryPlan = await queryRewriter(ctx, langfuseTraceId);
 
-    // Send annotation about the action that was chosen
+    // 2. Search based on the queries
+    const searchPromises = queryPlan.queries.map(async (query) => {
+      // Fetch search results
+      const searchResults = await searchWeb(query);
+      // Scrape each URL
+      const urls = searchResults.map((result) => result.link);
+      const scrapeResults = await scrapeUrl(urls);
+
+      // Get conversation history for summarization context
+      const conversationHistory = ctx.getConversationHistory();
+
+      // Summarize each successful scrape result in parallel
+      const summaryPromises = searchResults.map(async (result) => {
+        const scrape = scrapeResults.find((s) => s.url === result.link);
+
+        if (scrape && scrape.success) {
+          try {
+            const summary = await summarizeURL({
+              conversationHistory,
+              scrapedContent: scrape.data,
+              searchMetadata: {
+                date: result.date || "Unknown",
+                title: result.title,
+                url: result.link,
+                snippet: result.snippet,
+              },
+              query: query,
+              langfuseTraceId,
+            });
+            return summary;
+          } catch (error) {
+            console.error("Summarization failed for", result.link, error);
+            return scrape.data; // Fallback to original content
+          }
+        } else {
+          return scrape ? `Error: ${scrape.error}` : "No scrape result";
+        }
+      });
+
+      const summaries = await Promise.all(summaryPromises);
+
+      // Combine search and summarized results
+      const combinedResults = searchResults.map((result, index) => ({
+        date: result.date || "Unknown",
+        title: result.title,
+        url: result.link,
+        snippet: result.snippet,
+        scrapedContent: summaries[index] || "No content available",
+      }));
+
+      return {
+        query,
+        results: combinedResults,
+      };
+    });
+
+    // Wait for all searches to complete
+    const searchResults = await Promise.all(searchPromises);
+
+    // 3. Save it to the context
+    searchResults.forEach(({ query, results }) => {
+      ctx.reportSearch({
+        query,
+        results,
+      });
+    });
+
+    // Send annotation about the search step
     writeMessageAnnotation({
       type: "NEW_ACTION",
-      action: nextAction as Action,
+      action: {
+        type: "continue",
+        title: "Searching for information",
+        reasoning: `Executed ${queryPlan.queries.length} search queries to gather information`,
+      } as Action,
+      queryPlan,
     } satisfies OurMessageAnnotation);
+
+    // 4. Decide whether to continue by calling getNextAction
+    const nextAction = await getNextAction(ctx, langfuseTraceId);
 
     // Handle error action
     if (nextAction.type === "error") {
@@ -127,86 +202,6 @@ export const runAgentLoop = async ({
     // If we should answer, do so immediately
     if (nextAction.type === "answer") {
       return answerQuestion(ctx, { onFinish, langfuseTraceId });
-    }
-
-    // If we should continue, generate queries and search
-    if (nextAction.type === "continue") {
-      // Generate queries using the query rewriter
-      const queryPlan = await queryRewriter(ctx, langfuseTraceId);
-
-      // Send annotation with the query plan
-      writeMessageAnnotation({
-        type: "NEW_ACTION",
-        action: nextAction as Action,
-        queryPlan,
-      } satisfies OurMessageAnnotation);
-
-      // Execute all queries in parallel for maximum speed
-      const searchPromises = queryPlan.queries.map(async (query) => {
-        // Fetch search results
-        const searchResults = await searchWeb(query);
-        // Scrape each URL
-        const urls = searchResults.map((result) => result.link);
-        const scrapeResults = await scrapeUrl(urls);
-
-        // Get conversation history for summarization context
-        const conversationHistory = ctx.getConversationHistory();
-
-        // Summarize each successful scrape result in parallel
-        const summaryPromises = searchResults.map(async (result) => {
-          const scrape = scrapeResults.find((s) => s.url === result.link);
-
-          if (scrape && scrape.success) {
-            try {
-              const summary = await summarizeURL({
-                conversationHistory,
-                scrapedContent: scrape.data,
-                searchMetadata: {
-                  date: result.date || "Unknown",
-                  title: result.title,
-                  url: result.link,
-                  snippet: result.snippet,
-                },
-                query: query,
-                langfuseTraceId,
-              });
-              return summary;
-            } catch (error) {
-              console.error("Summarization failed for", result.link, error);
-              return scrape.data; // Fallback to original content
-            }
-          } else {
-            return scrape ? `Error: ${scrape.error}` : "No scrape result";
-          }
-        });
-
-        const summaries = await Promise.all(summaryPromises);
-
-        // Combine search and summarized results
-        const combinedResults = searchResults.map((result, index) => ({
-          date: result.date || "Unknown",
-          title: result.title,
-          url: result.link,
-          snippet: result.snippet,
-          scrapedContent: summaries[index] || "No content available",
-        }));
-
-        return {
-          query,
-          results: combinedResults,
-        };
-      });
-
-      // Wait for all searches to complete
-      const searchResults = await Promise.all(searchPromises);
-
-      // Report all search results to the context
-      searchResults.forEach(({ query, results }) => {
-        ctx.reportSearch({
-          query,
-          results,
-        });
-      });
     }
 
     // We increment the step counter
