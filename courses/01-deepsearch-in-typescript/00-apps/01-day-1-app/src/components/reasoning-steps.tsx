@@ -17,6 +17,9 @@ export const ReasoningSteps = ({
       <ul className="space-y-1">
         {annotations.map((annotation, index) => {
           const isOpen = openStep === index;
+          if (!annotation.action.title || !annotation.action.reasoning) {
+            return null;
+          }
           return (
             <li key={index} className="relative">
               <button

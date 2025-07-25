@@ -7,7 +7,6 @@ import { bulkCrawlWebsites } from "./scraper";
 import { env } from "./env";
 import type { LocationHints } from "./types";
 import { recordError } from "./server/db/queries";
-import { sanitizeScrapedContent } from "./utils";
 
 export type OurMessageAnnotation = {
   type: "NEW_ACTION";
@@ -144,7 +143,7 @@ export const runAgentLoop = async ({
           snippet: result.snippet,
           scrapedContent:
             scrape && scrape.success
-              ? sanitizeScrapedContent(scrape.data)
+              ? scrape.data // Store original content for UI display
               : scrape
                 ? `Error: ${scrape.error}`
                 : "No scrape result",
