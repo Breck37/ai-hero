@@ -13,10 +13,28 @@ import { streamFromDeepSearch } from "~/deep-search";
 import { checkRateLimit, recordRateLimit } from "~/server/rate-limit";
 import type { OurMessageAnnotation } from "~/run-agent-loop";
 import { generateChatTitle } from "~/generate-chat-title";
+import { geolocation } from "@vercel/functions";
 
 export const maxDuration = 60;
 
 export async function POST(request: Request) {
+  // Mock location headers for local development
+  if (process.env.NODE_ENV === "development") {
+    request.headers.set("x-vercel-ip-country", "US");
+    request.headers.set("x-vercel-ip-country-region", "AZ");
+    request.headers.set("x-vercel-ip-city", "Phoenix");
+  }
+
+  // Get user location
+  const { longitude, latitude, city, country } = geolocation(request);
+
+  const requestHints = {
+    longitude,
+    latitude,
+    city,
+    country,
+  };
+
   // Initialize Langfuse client
   const langfuse = new Langfuse({
     environment: env.NODE_ENV,

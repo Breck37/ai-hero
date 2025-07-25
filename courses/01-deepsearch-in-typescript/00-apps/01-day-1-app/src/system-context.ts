@@ -1,4 +1,5 @@
 import type { Message } from "ai";
+import type { LocationHints } from "./types";
 
 type QueryResultSearchResult = {
   date: string;
@@ -41,8 +42,14 @@ export class SystemContext {
    */
   private scrapeHistory: ScrapeResult[] = [];
 
-  constructor(messages: Message[]) {
+  /**
+   * User location information
+   */
+  private locationHints?: LocationHints;
+
+  constructor(messages: Message[], locationHints?: LocationHints) {
     this.messages = messages;
+    this.locationHints = locationHints;
   }
 
   shouldStop() {
@@ -114,5 +121,22 @@ export class SystemContext {
         ].join("\n\n"),
       )
       .join("\n\n");
+  }
+
+  getLocationHints(): LocationHints | undefined {
+    return this.locationHints;
+  }
+
+  getLocationPrompt(): string {
+    if (!this.locationHints) {
+      return "";
+    }
+
+    return `USER LOCATION:
+- City: ${this.locationHints.city || "Unknown"}
+- Country: ${this.locationHints.country || "Unknown"}
+- Coordinates: ${this.locationHints.latitude || "Unknown"}, ${this.locationHints.longitude || "Unknown"}
+
+When users ask for location-based information (restaurants, weather, local events, etc.), use their location to provide relevant results.`;
   }
 }

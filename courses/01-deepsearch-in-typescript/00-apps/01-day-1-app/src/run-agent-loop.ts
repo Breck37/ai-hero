@@ -5,6 +5,7 @@ import { answerQuestion } from "./answer-question";
 import { searchSerper } from "./serper";
 import { bulkCrawlWebsites } from "./scraper";
 import { env } from "./env";
+import type { LocationHints } from "./types";
 
 export type OurMessageAnnotation = {
   type: "NEW_ACTION";
@@ -62,9 +63,10 @@ export const runAgentLoop = async (
   onFinish?: Parameters<typeof streamText>[0]["onFinish"],
   writeMessageAnnotation?: (annotation: OurMessageAnnotation) => void,
   langfuseTraceId?: string,
+  locationHints?: LocationHints,
 ): Promise<StreamTextResult<{}, string>> => {
   // A persistent container for the state of our system
-  const ctx = new SystemContext(messages);
+  const ctx = new SystemContext(messages, locationHints);
 
   // A loop that continues until we have an answer
   // or we've taken 10 actions
@@ -124,5 +126,9 @@ export const runAgentLoop = async (
 
   // If we've taken 10 actions and still don't have an answer,
   // we ask the LLM to give its best attempt at an answer
-  return answerQuestion(ctx, { isFinal: true, onFinish, langfuseTraceId });
+  return answerQuestion(ctx, {
+    isFinal: true,
+    onFinish,
+    langfuseTraceId,
+  });
 };

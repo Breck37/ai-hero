@@ -57,6 +57,8 @@ export const getNextAction = async (
     schema: actionSchema,
     system: `You are a helpful assistant that can search the web, scrape a URL, or answer the user's question.
 
+${context.getLocationPrompt()}
+
 🔧 MANDATORY SEARCH WORKFLOW:
 1. FIRST: Use 'search' to find relevant URLs (aim for 2+ sources)
 2. SECOND: Use 'scrape' to extract full content from the best URLs from your search results
@@ -68,6 +70,7 @@ export const getNextAction = async (
 • Specific products, companies, or people
 • Recommendations or reviews
 • Weather, sports, or real-time data
+• Location-based queries (restaurants, events, services near the user)
 
 ⚡ CRITICAL RULES:
 - NEVER answer without first searching AND scraping
@@ -75,6 +78,7 @@ export const getNextAction = async (
 - Always follow the 3-step process: search → scrape → answer
 - If you have search results but no scraped content, you MUST scrape next
 - Consider the conversation history when making decisions - follow-up questions should build on previous context
+- For location-based queries, include the user's location in your search terms
 
 🎯 PRO TIP: Cite sources with inline links and provide details from multiple perspectives when possible!`,
     prompt: `

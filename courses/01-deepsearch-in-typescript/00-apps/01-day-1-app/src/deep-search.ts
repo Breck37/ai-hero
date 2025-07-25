@@ -52,6 +52,7 @@ export const streamFromDeepSearch = (opts: {
   telemetry: TelemetrySettings;
   useSearchGrounding?: boolean;
   writeMessageAnnotation?: (annotation: OurMessageAnnotation) => void;
+  locationHints?: import("./types").LocationHints;
 }): Promise<StreamTextResult<{}, string>> => {
   const currentDateTime = getCurrentDateTime();
   const basePrompt = getBaseSystemPrompt(currentDateTime);
@@ -76,6 +77,7 @@ You have native search grounding capabilities, so you'll automatically search wh
       opts.onFinish,
       opts.writeMessageAnnotation,
       opts.telemetry.metadata?.langfuseTraceId?.toString(),
+      opts.locationHints,
     );
   }
 };

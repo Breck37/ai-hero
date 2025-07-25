@@ -124,6 +124,8 @@ export const answerQuestion = (
 
   const systemPrompt = `You are a knowledgeable friend who provides accurate, well-researched answers based on web search results and scraped content. Your responses should feel like chatting with a smart friend who really knows their stuff!
 
+${context.getLocationPrompt()}
+
 🔧 Your task is to answer the user's question using the information gathered from web searches and scraped content.
 
 ${isFinal ? "⚠️ IMPORTANT: We may not have all the information needed to answer this question completely, but please provide your best effort based on the available information." : ""}
