@@ -18,9 +18,16 @@ type AnswerAction = {
   reasoning: string;
 };
 
-type Action = SearchAction | AnswerAction;
+type ErrorAction = {
+  type: "error";
+  message: string;
+  title?: string;
+  reasoning?: string;
+};
 
-export type { Action };
+type Action = SearchAction | AnswerAction | ErrorAction;
+
+export type { Action, ErrorAction };
 export const actionSchema = z.object({
   type: z.enum(["search", "answer"]).describe(
     `The type of action to take.
@@ -57,10 +64,15 @@ export const getNextAction = async (
   context: SystemContext,
   langfuseTraceId?: string,
 ) => {
-  const result = await generateObject({
-    model,
-    schema: actionSchema,
-    system: `You are a helpful assistant that can search the web (and always scrape the results) or answer the user's question.
+  let result;
+  try {
+    result = await generateObject({
+      model,
+      schema: actionSchema,
+      system: `
+Respond ONLY with a valid JSON object matching the schema provided. Do not include any commentary or extra text.
+
+You are a helpful assistant that can search the web (and always scrape the results) or answer the user's question.
 
 ${context.getLocationPrompt()}
 
@@ -83,8 +95,9 @@ ${context.getLocationPrompt()}
 - Consider the conversation history when making decisions - follow-up questions should build on previous context
 - For location-based queries, include the user's location in your search terms
 
-🎯 PRO TIP: Cite sources with inline links and provide details from multiple perspectives when possible!`,
-    prompt: `
+🎯 PRO TIP: Cite sources with inline links and provide details from multiple perspectives when possible!
+`,
+      prompt: `
 Conversation History:
 ${context.getConversationHistory()}
 
@@ -102,16 +115,60 @@ Here is the research context:
 
 ${context.getSearchHistory()}
     `,
-    experimental_telemetry: langfuseTraceId
-      ? {
-          isEnabled: true,
-          functionId: "agent-get-next-action",
-          metadata: {
-            langfuseTraceId,
-          },
-        }
-      : undefined,
-  });
+      experimental_telemetry: langfuseTraceId
+        ? {
+            isEnabled: true,
+            functionId: "agent-get-next-action",
+            metadata: {
+              langfuseTraceId,
+            },
+          }
+        : undefined,
+    });
+    return result.object;
+  } catch (err) {
+    // Log error with tracing context
+    console.error("LLM generation error:", {
+      error: err,
+      langfuseTraceId,
+      step: context.getStep(),
+      hasSearchResults: context.hasSearchResults(),
+    });
 
-  return result.object;
+    // Try to extract JSON from the error message or raw output
+    let raw = "";
+    if (
+      result &&
+      typeof result === "object" &&
+      "raw" in result &&
+      typeof result.raw === "string"
+    ) {
+      raw = result.raw;
+    } else if (
+      err &&
+      typeof err === "object" &&
+      err !== null &&
+      "message" in err &&
+      typeof (err as any).message === "string"
+    ) {
+      raw = (err as any).message;
+    }
+    const match = raw.match(/\{[\s\S]*\}/);
+    if (match) {
+      try {
+        return JSON.parse(match[0]);
+      } catch (e) {
+        // fall through
+      }
+    }
+    return {
+      type: "error",
+      message: `Malformed LLM output or JSON error: ${raw || "Unknown error"}`,
+      context: {
+        step: context.getStep(),
+        hasSearchResults: context.hasSearchResults(),
+        langfuseTraceId,
+      },
+    };
+  }
 };

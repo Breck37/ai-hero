@@ -6,6 +6,7 @@ import { searchSerper } from "./serper";
 import { bulkCrawlWebsites } from "./scraper";
 import { env } from "./env";
 import type { LocationHints } from "./types";
+import { recordError } from "./server/db/queries";
 
 export type OurMessageAnnotation = {
   type: "NEW_ACTION";
@@ -58,13 +59,25 @@ const scrapeUrl = async (urls: string[]) => {
   }));
 };
 
-export const runAgentLoop = async (
-  messages: Message[],
-  onFinish?: Parameters<typeof streamText>[0]["onFinish"],
-  writeMessageAnnotation?: (annotation: OurMessageAnnotation) => void,
-  langfuseTraceId?: string,
-  locationHints?: LocationHints,
-): Promise<StreamTextResult<{}, string>> => {
+export interface RunAgentLoopArgs {
+  messages: Message[];
+  writeMessageAnnotation: (annotation: OurMessageAnnotation) => void;
+  onFinish?: Parameters<typeof streamText>[0]["onFinish"];
+  langfuseTraceId?: string;
+  locationHints?: LocationHints;
+  chatId?: string;
+  userId?: string;
+}
+
+export const runAgentLoop = async ({
+  messages,
+  writeMessageAnnotation,
+  onFinish,
+  langfuseTraceId,
+  locationHints,
+  chatId,
+  userId,
+}: RunAgentLoopArgs): Promise<StreamTextResult<{}, string>> => {
   // A persistent container for the state of our system
   const ctx = new SystemContext(messages, locationHints);
 
@@ -74,12 +87,39 @@ export const runAgentLoop = async (
     // We choose the next action based on the state of our system
     const nextAction = await getNextAction(ctx, langfuseTraceId);
 
+    // Handle error action
+    if (nextAction.type === "error") {
+      console.error("Agent error:", nextAction.message);
+
+      // Record error to database if we have the required info
+      if (chatId && userId) {
+        try {
+          await recordError({
+            chatId,
+            userId,
+            langfuseTraceId,
+            errorType: "llm_output",
+            errorMessage: nextAction.message,
+            context: {
+              step: ctx.getStep(),
+              hasSearchResults: ctx.hasSearchResults(),
+              ...((nextAction as any).context || {}),
+            },
+          });
+        } catch (recordErr) {
+          console.error("Failed to record agent error:", recordErr);
+        }
+      }
+
+      break;
+    }
+
     // Send annotation about the action that was chosen
     if (writeMessageAnnotation) {
-      writeMessageAnnotation({
-        type: "NEW_ACTION",
-        action: nextAction as Action,
-      } satisfies OurMessageAnnotation);
+    writeMessageAnnotation({
+      type: "NEW_ACTION",
+      action: nextAction as Action,
+    } satisfies OurMessageAnnotation);
     }
 
     // We execute the action and update the state of our system

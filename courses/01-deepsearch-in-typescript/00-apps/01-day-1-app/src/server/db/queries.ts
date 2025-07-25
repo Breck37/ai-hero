@@ -1,6 +1,6 @@
 import { and, count, eq, gte, desc, asc } from "drizzle-orm";
 import { db } from "./index";
-import { userRequests, users, chats, messages } from "./schema";
+import { userRequests, users, chats, messages, errors } from "./schema";
 import type { Message } from "ai";
 
 // Rate limit configuration
@@ -244,4 +244,50 @@ export async function getChats(userId: string) {
     .orderBy(desc(chats.updatedAt));
 
   return chatList;
+}
+
+/**
+ * Record an error to the database
+ */
+export async function recordError(opts: {
+  chatId?: string;
+  userId?: string;
+  langfuseTraceId?: string;
+  errorType: string;
+  errorMessage: string;
+  errorStack?: string;
+  context?: Record<string, any>;
+}): Promise<void> {
+  await db.insert(errors).values({
+    chatId: opts.chatId,
+    userId: opts.userId,
+    langfuseTraceId: opts.langfuseTraceId,
+    errorType: opts.errorType,
+    errorMessage: opts.errorMessage,
+    errorStack: opts.errorStack,
+    context: opts.context,
+  });
+}
+
+/**
+ * Get errors for a specific chat
+ */
+export async function getChatErrors(chatId: string) {
+  return await db
+    .select()
+    .from(errors)
+    .where(eq(errors.chatId, chatId))
+    .orderBy(desc(errors.createdAt));
+}
+
+/**
+ * Get recent errors for a user
+ */
+export async function getUserErrors(userId: string, limit: number = 10) {
+  return await db
+    .select()
+    .from(errors)
+    .where(eq(errors.userId, userId))
+    .orderBy(desc(errors.createdAt))
+    .limit(limit);
 }

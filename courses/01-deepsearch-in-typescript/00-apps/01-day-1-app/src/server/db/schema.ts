@@ -211,6 +211,40 @@ export const messagesRelations = relations(messages, ({ one }) => ({
   chat: one(chats, { fields: [messages.chatId], references: [chats.id] }),
 }));
 
+export const errors = createTable(
+  "error",
+  {
+    id: varchar("id", { length: 255 })
+      .notNull()
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    chatId: varchar("chat_id", { length: 255 }).references(() => chats.id),
+    userId: varchar("user_id", { length: 255 }).references(() => users.id),
+    langfuseTraceId: varchar("langfuse_trace_id", { length: 255 }),
+    errorType: varchar("error_type", { length: 255 }).notNull(), // e.g., "json_parse", "agent_loop", "llm_output"
+    errorMessage: text("error_message").notNull(),
+    errorStack: text("error_stack"),
+    context: json("context"), // Additional context like current step, action, etc.
+    createdAt: timestamp("created_at", {
+      mode: "date",
+      withTimezone: true,
+    })
+      .notNull()
+      .default(sql`CURRENT_TIMESTAMP`),
+  },
+  (error) => ({
+    chatIdIdx: index("error_chat_id_idx").on(error.chatId),
+    userIdIdx: index("error_user_id_idx").on(error.userId),
+    createdAtIdx: index("error_created_at_idx").on(error.createdAt),
+    errorTypeIdx: index("error_type_idx").on(error.errorType),
+  }),
+);
+
+export const errorsRelations = relations(errors, ({ one }) => ({
+  chat: one(chats, { fields: [errors.chatId], references: [chats.id] }),
+  user: one(users, { fields: [errors.userId], references: [users.id] }),
+}));
+
 export declare namespace DB {
   export type User = InferSelectModel<typeof users>;
   export type NewUser = InferInsertModel<typeof users>;
@@ -234,4 +268,7 @@ export declare namespace DB {
 
   export type Message = InferSelectModel<typeof messages>;
   export type NewMessage = InferInsertModel<typeof messages>;
+
+  export type Error = InferSelectModel<typeof errors>;
+  export type NewError = InferInsertModel<typeof errors>;
 }
