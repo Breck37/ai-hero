@@ -3,6 +3,7 @@ import { generateObject } from "ai";
 import { model } from "../model";
 import type { SystemContext } from "./system-context";
 import type { SearchResult } from "./types";
+import { safeJsonParse } from "./utils";
 
 type SearchAction = {
   type: "search";
@@ -153,14 +154,19 @@ ${context.getSearchHistory()}
     ) {
       raw = (err as any).message;
     }
+
+    // Use intelligent JSON parsing with auto-repair
     const match = raw.match(/\{[\s\S]*\}/);
     if (match) {
-      try {
-        return JSON.parse(match[0]);
-      } catch (e) {
-        // fall through
+      const parseResult = safeJsonParse(match[0]);
+      if (parseResult.success) {
+        console.warn(
+          "Successfully recovered from malformed JSON using auto-repair",
+        );
+        return parseResult.data;
       }
     }
+
     return {
       type: "error",
       message: `Malformed LLM output or JSON error: ${raw || "Unknown error"}`,

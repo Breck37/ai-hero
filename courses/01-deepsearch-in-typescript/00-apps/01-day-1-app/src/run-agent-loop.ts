@@ -7,6 +7,7 @@ import { bulkCrawlWebsites } from "./scraper";
 import { env } from "./env";
 import type { LocationHints } from "./types";
 import { recordError } from "./server/db/queries";
+import { sanitizeScrapedContent } from "./utils";
 
 export type OurMessageAnnotation = {
   type: "NEW_ACTION";
@@ -87,6 +88,12 @@ export const runAgentLoop = async ({
     // We choose the next action based on the state of our system
     const nextAction = await getNextAction(ctx, langfuseTraceId);
 
+    // Send annotation about the action that was chosen
+    writeMessageAnnotation({
+      type: "NEW_ACTION",
+      action: nextAction as Action,
+    } satisfies OurMessageAnnotation);
+
     // Handle error action
     if (nextAction.type === "error") {
       console.error("Agent error:", nextAction.message);
@@ -111,14 +118,9 @@ export const runAgentLoop = async ({
         }
       }
 
+      // Break to allow fallback logic to handle the error gracefully
       break;
     }
-
-    // Send annotation about the action that was chosen
-    writeMessageAnnotation({
-      type: "NEW_ACTION",
-      action: nextAction as Action,
-    } satisfies OurMessageAnnotation);
 
     // We execute the action and update the state of our system
     if (nextAction.type === "search") {
@@ -142,7 +144,7 @@ export const runAgentLoop = async ({
           snippet: result.snippet,
           scrapedContent:
             scrape && scrape.success
-              ? scrape.data
+              ? sanitizeScrapedContent(scrape.data)
               : scrape
                 ? `Error: ${scrape.error}`
                 : "No scrape result",

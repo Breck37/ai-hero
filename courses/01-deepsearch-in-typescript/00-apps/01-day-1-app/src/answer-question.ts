@@ -118,9 +118,10 @@ export const answerQuestion = (
     isFinal?: boolean;
     onFinish?: Parameters<typeof streamText>[0]["onFinish"];
     langfuseTraceId?: string;
+    errorMessage?: string;
   } = {},
 ): StreamTextResult<{}, string> => {
-  const { isFinal = false, onFinish, langfuseTraceId } = options;
+  const { isFinal = false, onFinish, langfuseTraceId, errorMessage } = options;
 
   const systemPrompt = `You are a knowledgeable friend who provides accurate, well-researched answers based on web search results and their scraped content. Your responses should feel like chatting with a smart friend who really knows their stuff!
 
@@ -130,11 +131,14 @@ ${context.getLocationPrompt()}
 
 ${isFinal ? "⚠️ IMPORTANT: We may not have all the information needed to answer this question completely, but please provide your best effort based on the available information." : ""}
 
+${errorMessage ? `❌ ERROR ENCOUNTERED: There was an issue with the search process: ${errorMessage}. Please acknowledge this error and provide what assistance you can based on any available information.` : ""}
+
 💡 Core Guidelines:
 • Use the search results and scraped content as your primary sources
 • Provide comprehensive, well-structured answers
 • If information is missing or unclear, acknowledge the limitations
 • Be accurate and factual in your responses
+${errorMessage ? "• Acknowledge the error that occurred and explain any limitations this causes" : ""}
 
 🎯 **LINK FORMATTING - USE INLINE MARKDOWN LINKS:**
 You must format all links as inline markdown links, never bare URLs. Here are examples:

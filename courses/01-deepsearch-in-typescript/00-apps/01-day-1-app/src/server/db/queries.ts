@@ -2,6 +2,7 @@ import { and, count, eq, gte, desc, asc } from "drizzle-orm";
 import { db } from "./index";
 import { userRequests, users, chats, messages, errors } from "./schema";
 import type { Message } from "ai";
+import { cleanJsonContent, sanitizeForJson } from "~/utils";
 
 // Rate limit configuration
 export const DAILY_RATE_LIMIT = 50; // requests per day
@@ -114,6 +115,67 @@ export async function getUserRequestStats(userId: string): Promise<{
 }
 
 /**
+ * Safely sanitizes a message part to prevent JSON corruption
+ */
+function sanitizeMessagePart(part: any): any {
+  if (!part || typeof part !== "object") {
+    return part;
+  }
+
+  if (part.type === "text" && typeof part.text === "string") {
+    return {
+      ...part,
+      text: cleanJsonContent(part.text),
+    };
+  }
+
+  // For other part types, sanitize any string properties
+  const sanitized = { ...part };
+  for (const [key, value] of Object.entries(sanitized)) {
+    if (typeof value === "string") {
+      sanitized[key] = sanitizeForJson(value);
+    }
+  }
+
+  return sanitized;
+}
+
+/**
+ * Safely sanitizes message content before storage
+ */
+function sanitizeMessage(message: Message): Message {
+  const sanitized = { ...message };
+
+  // Sanitize content if it exists
+  if (sanitized.content && typeof sanitized.content === "string") {
+    sanitized.content = cleanJsonContent(sanitized.content);
+  }
+
+  // Sanitize parts if they exist
+  if (sanitized.parts && Array.isArray(sanitized.parts)) {
+    sanitized.parts = sanitized.parts.map(sanitizeMessagePart);
+  }
+
+  // Sanitize annotations if they exist
+  if (sanitized.annotations && Array.isArray(sanitized.annotations)) {
+    sanitized.annotations = sanitized.annotations.map((annotation) => {
+      if (typeof annotation === "object" && annotation !== null) {
+        const sanitizedAnnotation: any = { ...annotation };
+        for (const [key, value] of Object.entries(sanitizedAnnotation)) {
+          if (typeof value === "string") {
+            sanitizedAnnotation[key] = sanitizeForJson(value);
+          }
+        }
+        return sanitizedAnnotation;
+      }
+      return annotation;
+    });
+  }
+
+  return sanitized;
+}
+
+/**
  * Upsert a chat with all its messages
  * If the chat exists, it will delete all existing messages and replace them with the new ones
  * If the chat doesn't exist, it will create a new chat
@@ -143,7 +205,7 @@ export async function upsertChat(opts: {
     };
 
     if (title) {
-      updateData.title = title;
+      updateData.title = sanitizeForJson(title);
     }
 
     await db.update(chats).set(updateData).where(eq(chats.id, chatId));
@@ -152,28 +214,31 @@ export async function upsertChat(opts: {
     await db.insert(chats).values({
       id: chatId,
       userId,
-      title: title || "New Chat",
+      title: title ? sanitizeForJson(title) : "New Chat",
     });
   }
 
-  // Insert all messages
+  // Insert all messages with sanitization
   if (messageList.length > 0) {
     const messageValues = messageList.map((message, index) => {
+      // Sanitize the entire message
+      const sanitizedMessage = sanitizeMessage(message);
+
       // Ensure we always have proper parts
       let messageParts;
-      if (message.parts && Array.isArray(message.parts)) {
-        messageParts = message.parts;
-      } else if (message.content) {
-        messageParts = [{ type: "text", text: message.content }];
+      if (sanitizedMessage.parts && Array.isArray(sanitizedMessage.parts)) {
+        messageParts = sanitizedMessage.parts;
+      } else if (sanitizedMessage.content) {
+        messageParts = [{ type: "text", text: sanitizedMessage.content }];
       } else {
         messageParts = [{ type: "text", text: "" }];
       }
 
       return {
         chatId,
-        role: message.role,
+        role: sanitizedMessage.role,
         parts: messageParts,
-        annotations: message.annotations || null,
+        annotations: sanitizedMessage.annotations || null,
         order: index,
       };
     });

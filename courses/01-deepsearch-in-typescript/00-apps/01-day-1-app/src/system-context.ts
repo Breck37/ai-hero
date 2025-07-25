@@ -1,6 +1,11 @@
 import type { Message } from "ai";
 import type { LocationHints, SearchResult } from "./types";
-import { sanitizeForJson } from "./utils";
+import {
+  sanitizeForJson,
+  extractSafeTextContent,
+  cleanJsonContent,
+  prepareLLMContent,
+} from "./utils";
 
 type SearchHistoryEntry = {
   query: string;
@@ -46,15 +51,12 @@ export class SystemContext {
 
     if (!lastUserMessage) return "";
 
-    // Extract text content from message
+    // Extract text content from message safely
     if (lastUserMessage.content && lastUserMessage.content.trim()) {
-      return lastUserMessage.content;
+      return cleanJsonContent(lastUserMessage.content);
     } else if (lastUserMessage.parts && Array.isArray(lastUserMessage.parts)) {
-      // Extract text from parts
-      return lastUserMessage.parts
-        .filter((part) => part.type === "text")
-        .map((part) => part.text)
-        .join(" ");
+      // Extract text from parts using safe extraction
+      return extractSafeTextContent(lastUserMessage.parts);
     }
 
     return "";
@@ -66,16 +68,13 @@ export class SystemContext {
       .map((msg) => {
         const role = msg.role === "user" ? "User" : "Assistant";
 
-        // Extract text content from message
+        // Extract text content from message safely
         let messageText = "";
         if (msg.content && msg.content.trim()) {
-          messageText = msg.content;
+          messageText = cleanJsonContent(msg.content);
         } else if (msg.parts && Array.isArray(msg.parts)) {
-          // Extract text from parts
-          messageText = msg.parts
-            .filter((part) => part.type === "text")
-            .map((part) => part.text)
-            .join(" ");
+          // Extract text from parts using safe extraction
+          messageText = extractSafeTextContent(msg.parts);
         }
 
         return `${role}: ${messageText}`;
@@ -92,7 +91,7 @@ export class SystemContext {
   }
 
   getSearchHistory(): string {
-    return this.searchHistory
+    const searchHistoryText = this.searchHistory
       .map((search) =>
         [
           `## Query: "${sanitizeForJson(search.query)}"`,
@@ -109,6 +108,9 @@ export class SystemContext {
         ].join("\n\n"),
       )
       .join("\n\n");
+
+    // Prepare content for LLM with additional safety checks
+    return prepareLLMContent(searchHistoryText);
   }
 
   getLocationHints(): LocationHints | undefined {
