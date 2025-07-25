@@ -1,5 +1,6 @@
 import type { Message } from "ai";
 import type { LocationHints, SearchResult } from "./types";
+import { sanitizeForJson } from "./utils";
 
 type SearchHistoryEntry = {
   query: string;
@@ -42,7 +43,21 @@ export class SystemContext {
       .slice()
       .reverse()
       .find((msg) => msg.role === "user");
-    return lastUserMessage?.content || "";
+
+    if (!lastUserMessage) return "";
+
+    // Extract text content from message
+    if (lastUserMessage.content && lastUserMessage.content.trim()) {
+      return lastUserMessage.content;
+    } else if (lastUserMessage.parts && Array.isArray(lastUserMessage.parts)) {
+      // Extract text from parts
+      return lastUserMessage.parts
+        .filter((part) => part.type === "text")
+        .map((part) => part.text)
+        .join(" ");
+    }
+
+    return "";
   }
 
   getConversationHistory(): string {
@@ -50,7 +65,20 @@ export class SystemContext {
     return this.messages
       .map((msg) => {
         const role = msg.role === "user" ? "User" : "Assistant";
-        return `${role}: ${msg.content}`;
+
+        // Extract text content from message
+        let messageText = "";
+        if (msg.content && msg.content.trim()) {
+          messageText = msg.content;
+        } else if (msg.parts && Array.isArray(msg.parts)) {
+          // Extract text from parts
+          messageText = msg.parts
+            .filter((part) => part.type === "text")
+            .map((part) => part.text)
+            .join(" ");
+        }
+
+        return `${role}: ${messageText}`;
       })
       .join("\n\n");
   }
@@ -67,14 +95,14 @@ export class SystemContext {
     return this.searchHistory
       .map((search) =>
         [
-          `## Query: "${search.query}"`,
+          `## Query: "${sanitizeForJson(search.query)}"`,
           ...search.results.map((result) =>
             [
-              `### ${result.date} - ${result.title}`,
-              result.url,
-              result.snippet,
+              `### ${sanitizeForJson(result.date)} - ${sanitizeForJson(result.title)}`,
+              sanitizeForJson(result.url),
+              sanitizeForJson(result.snippet),
               `<scrape_result>`,
-              result.scrapedContent,
+              sanitizeForJson(result.scrapedContent),
               `</scrape_result>`,
             ].join("\n\n"),
           ),

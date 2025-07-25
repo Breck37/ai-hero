@@ -115,12 +115,10 @@ export const runAgentLoop = async ({
     }
 
     // Send annotation about the action that was chosen
-    if (writeMessageAnnotation) {
     writeMessageAnnotation({
       type: "NEW_ACTION",
       action: nextAction as Action,
     } satisfies OurMessageAnnotation);
-    }
 
     // We execute the action and update the state of our system
     if (nextAction.type === "search") {

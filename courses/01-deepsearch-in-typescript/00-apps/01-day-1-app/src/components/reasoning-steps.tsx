@@ -45,7 +45,7 @@ export const ReasoningSteps = ({
               </button>
               <div
                 className={`overflow-hidden transition-all duration-200 ${
-                  isOpen ? "mt-2 max-h-96 opacity-100" : "max-h-0 opacity-0"
+                  isOpen ? "mt-2 opacity-100" : "max-h-0 opacity-0"
                 }`}
               >
                 <div className="rounded-lg border border-purple-500/30 bg-purple-950/20 p-3">
@@ -87,7 +87,7 @@ export const ReasoningSteps = ({
                                 <div className="mt-2 text-xs text-purple-400">
                                   Scraped Content:
                                 </div>
-                                <div className="max-h-40 overflow-y-auto whitespace-pre-line rounded bg-purple-950/60 p-2 text-xs text-purple-100">
+                                <div className="overflow-y-auto whitespace-pre-line rounded bg-purple-950/60 p-2 text-xs text-purple-100">
                                   {result.scrapedContent}
                                 </div>
                               </div>

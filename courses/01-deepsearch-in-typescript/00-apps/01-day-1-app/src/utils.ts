@@ -11,3 +11,7 @@ export function isNewChatCreated(data: unknown): data is {
     typeof data.chatId === "string"
   );
 }
+
+export function sanitizeForJson(str: string): string {
+  return str.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\n/g, "\\n");
+}
