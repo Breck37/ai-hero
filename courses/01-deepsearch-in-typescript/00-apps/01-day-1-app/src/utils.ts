@@ -13,7 +13,7 @@ export function isNewChatCreated(data: unknown): data is {
 }
 
 /**
- * Clean content for display/logging - replaces problematic characters with spaces
+ * Clean content for display/logging - replaces problematic characters with spaces, preserves newlines
  */
 export function sanitizeForDisplay(str: string): string {
   if (typeof str !== "string") {
@@ -22,16 +22,24 @@ export function sanitizeForDisplay(str: string): string {
 
   return (
     str
-      // Replace control characters with spaces (makes content readable)
-      .replace(/[\x00-\x1F\x7F-\x9F]/g, " ")
-      // Replace Unicode line separators with spaces
-      .replace(/[\u2028\u2029]/g, " ")
-      // Replace literal escape sequences that might appear as text
-      .replace(/\\[bfnrtv]/g, " ")
+      // First normalize line endings
+      .replace(/\r\n/g, "\n")
+      .replace(/\r/g, "\n")
+      // Replace control characters with spaces (excluding newlines \x0A and carriage returns \x0D)
+      .replace(/[\x00-\x09\x0B\x0C\x0E-\x1F\x7F-\x9F]/g, " ")
+      // Replace Unicode line separators with newlines
+      .replace(/[\u2028\u2029]/g, "\n")
+      // Replace literal escape sequences that might appear as text (except \n)
+      .replace(/\\[bfrtv]/g, " ")
+      .replace(/\\n/g, "\n")
       // Replace remaining backslashes
       .replace(/\\/g, " ")
-      // Clean up excessive whitespace
-      .replace(/\s+/g, " ")
+      // Clean up excessive whitespace on each line, but preserve newlines
+      .replace(/[ \t]+/g, " ")
+      // Remove trailing spaces from each line
+      .replace(/ +$/gm, "")
+      // Remove leading spaces from each line
+      .replace(/^ +/gm, "")
       .trim()
   );
 }
