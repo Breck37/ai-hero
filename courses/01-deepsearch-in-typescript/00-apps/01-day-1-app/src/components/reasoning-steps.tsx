@@ -53,21 +53,47 @@ export const ReasoningSteps = ({
                     <ReactMarkdown>{annotation.action.reasoning}</ReactMarkdown>
                   </div>
                   {annotation.action.type === "search" && (
-                    <div className="mt-3 flex items-center gap-2 rounded-md bg-purple-950/40 px-2 py-1.5 text-sm text-purple-300/80">
-                      <SearchIcon className="size-4 text-purple-400" />
-                      <span className="font-mono text-xs">
-                        {annotation.action.query}
-                      </span>
-                    </div>
-                  )}
-                  {annotation.action.type === "scrape" && (
-                    <div className="mt-3 flex items-center gap-2 rounded-md bg-purple-950/40 px-2 py-1.5 text-sm text-purple-300/80">
-                      <LinkIcon className="size-4 text-purple-400" />
-                      <span className="font-mono text-xs">
-                        {annotation.action.urls
-                          ?.map((url) => new URL(url).hostname)
-                          ?.join(", ")}
-                      </span>
+                    <div className="mt-3 flex flex-col gap-2">
+                      <div className="flex items-center gap-2 rounded-md bg-purple-950/40 px-2 py-1.5 text-sm text-purple-300/80">
+                        <SearchIcon className="size-4 text-purple-400" />
+                        <span className="font-mono text-xs">
+                          {annotation.action.query}
+                        </span>
+                      </div>
+                      {annotation.action.results &&
+                        annotation.action.results.length > 0 && (
+                          <div className="mt-2">
+                            {annotation.action.results.map((result, idx) => (
+                              <div
+                                key={idx}
+                                className="mb-2 rounded border border-purple-500/20 bg-purple-950/30 p-2"
+                              >
+                                <div className="font-semibold text-purple-200">
+                                  <a
+                                    href={result.url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="underline"
+                                  >
+                                    {result.title}
+                                  </a>
+                                  <span className="ml-2 text-xs text-purple-400">
+                                    {result.date}
+                                  </span>
+                                </div>
+                                <div className="mt-1 text-xs text-purple-300">
+                                  {result.snippet}
+                                </div>
+                                <div className="mt-2 text-xs text-purple-400">
+                                  Scraped Content:
+                                </div>
+                                <div className="max-h-40 overflow-y-auto whitespace-pre-line rounded bg-purple-950/60 p-2 text-xs text-purple-100">
+                                  {result.scrapedContent}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
                     </div>
                   )}
                 </div>

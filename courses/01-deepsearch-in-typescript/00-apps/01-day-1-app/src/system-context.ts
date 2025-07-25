@@ -1,25 +1,10 @@
 import type { Message } from "ai";
-import type { LocationHints } from "./types";
+import type { LocationHints, SearchResult } from "./types";
 
-type QueryResultSearchResult = {
-  date: string;
-  title: string;
-  url: string;
-  snippet: string;
-};
-
-type QueryResult = {
+type SearchHistoryEntry = {
   query: string;
-  results: QueryResultSearchResult[];
+  results: SearchResult[];
 };
-
-type ScrapeResult = {
-  url: string;
-  result: string;
-};
-
-const toQueryResult = (query: QueryResultSearchResult) =>
-  [`### ${query.date} - ${query.title}`, query.url, query.snippet].join("\n\n");
 
 export class SystemContext {
   /**
@@ -31,20 +16,7 @@ export class SystemContext {
    * The full message history
    */
   private messages: Message[];
-
-  /**
-   * The history of all queries searched
-   */
-  private queryHistory: QueryResult[] = [];
-
-  /**
-   * The history of all URLs scraped
-   */
-  private scrapeHistory: ScrapeResult[] = [];
-
-  /**
-   * User location information
-   */
+  private searchHistory: SearchHistoryEntry[] = [];
   private locationHints?: LocationHints;
 
   constructor(messages: Message[], locationHints?: LocationHints) {
@@ -84,40 +56,28 @@ export class SystemContext {
   }
 
   hasSearchResults() {
-    return this.queryHistory.length > 0;
+    return this.searchHistory.length > 0;
   }
 
-  hasScrapedContent() {
-    return this.scrapeHistory.length > 0;
+  reportSearch(search: SearchHistoryEntry) {
+    this.searchHistory.push(search);
   }
 
-  reportQueries(queries: QueryResult[]) {
-    this.queryHistory.push(...queries);
-  }
-
-  reportScrapes(scrapes: ScrapeResult[]) {
-    this.scrapeHistory.push(...scrapes);
-  }
-
-  getQueryHistory(): string {
-    return this.queryHistory
-      .map((query) =>
+  getSearchHistory(): string {
+    return this.searchHistory
+      .map((search) =>
         [
-          `## Query: "${query.query}"`,
-          ...query.results.map(toQueryResult),
-        ].join("\n\n"),
-      )
-      .join("\n\n");
-  }
-
-  getScrapeHistory(): string {
-    return this.scrapeHistory
-      .map((scrape) =>
-        [
-          `## Scrape: "${scrape.url}"`,
-          `<scrape_result>`,
-          scrape.result,
-          `</scrape_result>`,
+          `## Query: "${search.query}"`,
+          ...search.results.map((result) =>
+            [
+              `### ${result.date} - ${result.title}`,
+              result.url,
+              result.snippet,
+              `<scrape_result>`,
+              result.scrapedContent,
+              `</scrape_result>`,
+            ].join("\n\n"),
+          ),
         ].join("\n\n"),
       )
       .join("\n\n");
@@ -132,11 +92,6 @@ export class SystemContext {
       return "";
     }
 
-    return `USER LOCATION:
-- City: ${this.locationHints.city || "Unknown"}
-- Country: ${this.locationHints.country || "Unknown"}
-- Coordinates: ${this.locationHints.latitude || "Unknown"}, ${this.locationHints.longitude || "Unknown"}
-
-When users ask for location-based information (restaurants, weather, local events, etc.), use their location to provide relevant results.`;
+    return `USER LOCATION:\n- City: ${this.locationHints.city || "Unknown"}\n- Country: ${this.locationHints.country || "Unknown"}\n- Coordinates: ${this.locationHints.latitude || "Unknown"}, ${this.locationHints.longitude || "Unknown"}\n\nWhen users ask for location-based information (restaurants, weather, local events, etc.), use their location to provide relevant results.`;
   }
 }

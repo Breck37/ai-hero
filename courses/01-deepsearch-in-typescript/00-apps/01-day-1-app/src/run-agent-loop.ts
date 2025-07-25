@@ -88,34 +88,33 @@ export const runAgentLoop = async (
         throw new Error("Search action requires a query");
       }
 
+      // Fetch search results
       const searchResults = await searchWeb(nextAction.query);
+      // Scrape each URL
+      const urls = searchResults.map((result) => result.link);
+      const scrapeResults = await scrapeUrl(urls);
 
-      // Convert search results to the format expected by SystemContext
-      const queryResult = {
-        query: nextAction.query,
-        results: searchResults.map((result) => ({
+      // Combine search and scrape results
+      const combinedResults = searchResults.map((result) => {
+        const scrape = scrapeResults.find((s) => s.url === result.link);
+        return {
           date: result.date || "Unknown",
           title: result.title,
           url: result.link,
           snippet: result.snippet,
-        })),
-      };
+          scrapedContent:
+            scrape && scrape.success
+              ? scrape.data
+              : scrape
+                ? `Error: ${scrape.error}`
+                : "No scrape result",
+        };
+      });
 
-      ctx.reportQueries([queryResult]);
-    } else if (nextAction.type === "scrape") {
-      if (!nextAction.urls || nextAction.urls.length === 0) {
-        throw new Error("Scrape action requires URLs");
-      }
-
-      const scrapeResults = await scrapeUrl(nextAction.urls);
-
-      // Convert scrape results to the format expected by SystemContext
-      const scrapeResult = scrapeResults.map((result) => ({
-        url: result.url,
-        result: result.success ? result.data : `Error: ${result.error}`,
-      }));
-
-      ctx.reportScrapes(scrapeResult);
+      ctx.reportSearch({
+        query: nextAction.query,
+        results: combinedResults,
+      });
     } else if (nextAction.type === "answer") {
       return answerQuestion(ctx, { onFinish, langfuseTraceId });
     }

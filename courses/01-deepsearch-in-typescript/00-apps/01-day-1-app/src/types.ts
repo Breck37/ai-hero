@@ -4,3 +4,11 @@ export interface LocationHints {
   city?: string;
   country?: string;
 }
+
+export type SearchResult = {
+  date: string;
+  title: string;
+  url: string;
+  snippet: string;
+  scrapedContent: string;
+};
