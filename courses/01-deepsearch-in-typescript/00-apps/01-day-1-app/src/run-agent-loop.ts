@@ -4,6 +4,7 @@ import { getNextAction, type Action } from "./get-next-action";
 import { answerQuestion } from "./answer-question";
 import { searchSerper } from "./serper";
 import { bulkCrawlWebsites } from "./scraper";
+import { summarizeURL } from "./summarize-url";
 import { env } from "./env";
 import type { LocationHints } from "./types";
 import { recordError } from "./server/db/queries";
@@ -133,22 +134,47 @@ export const runAgentLoop = async ({
       const urls = searchResults.map((result) => result.link);
       const scrapeResults = await scrapeUrl(urls);
 
-      // Combine search and scrape results
-      const combinedResults = searchResults.map((result) => {
+      // Get conversation history for summarization context
+      const conversationHistory = ctx.getConversationHistory();
+
+      // Summarize each successful scrape result in parallel
+      const summaryPromises = searchResults.map(async (result) => {
         const scrape = scrapeResults.find((s) => s.url === result.link);
-        return {
-          date: result.date || "Unknown",
-          title: result.title,
-          url: result.link,
-          snippet: result.snippet,
-          scrapedContent:
-            scrape && scrape.success
-              ? scrape.data // Store original content for UI display
-              : scrape
-                ? `Error: ${scrape.error}`
-                : "No scrape result",
-        };
+
+        if (scrape && scrape.success) {
+          try {
+            const summary = await summarizeURL({
+              conversationHistory,
+              scrapedContent: scrape.data,
+              searchMetadata: {
+                date: result.date || "Unknown",
+                title: result.title,
+                url: result.link,
+                snippet: result.snippet,
+              },
+              query: nextAction.query,
+              langfuseTraceId,
+            });
+            return summary;
+          } catch (error) {
+            console.error("Summarization failed for", result.link, error);
+            return scrape.data; // Fallback to original content
+          }
+        } else {
+          return scrape ? `Error: ${scrape.error}` : "No scrape result";
+        }
       });
+
+      const summaries = await Promise.all(summaryPromises);
+
+      // Combine search and summarized results
+      const combinedResults = searchResults.map((result, index) => ({
+        date: result.date || "Unknown",
+        title: result.title,
+        url: result.link,
+        snippet: result.snippet,
+        scrapedContent: summaries[index] || "No content available",
+      }));
 
       ctx.reportSearch({
         query: nextAction.query,

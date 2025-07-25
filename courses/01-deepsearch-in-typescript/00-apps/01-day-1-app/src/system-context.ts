@@ -1,9 +1,9 @@
 import type { Message } from "ai";
 import type { LocationHints, SearchResult } from "./types";
 import {
-  sanitizeForJson,
+  sanitizeForDisplay,
   extractSafeTextContent,
-  cleanJsonContent,
+  cleanTextContent,
   prepareLLMContent,
 } from "./utils";
 
@@ -53,7 +53,7 @@ export class SystemContext {
 
     // Extract text content from message safely
     if (lastUserMessage.content && lastUserMessage.content.trim()) {
-      return cleanJsonContent(lastUserMessage.content);
+      return cleanTextContent(lastUserMessage.content);
     } else if (lastUserMessage.parts && Array.isArray(lastUserMessage.parts)) {
       // Extract text from parts using safe extraction
       return extractSafeTextContent(lastUserMessage.parts);
@@ -71,7 +71,7 @@ export class SystemContext {
         // Extract text content from message safely
         let messageText = "";
         if (msg.content && msg.content.trim()) {
-          messageText = cleanJsonContent(msg.content);
+          messageText = cleanTextContent(msg.content);
         } else if (msg.parts && Array.isArray(msg.parts)) {
           // Extract text from parts using safe extraction
           messageText = extractSafeTextContent(msg.parts);
@@ -94,15 +94,15 @@ export class SystemContext {
     const searchHistoryText = this.searchHistory
       .map((search) =>
         [
-          `## Query: "${sanitizeForJson(search.query)}"`,
+          `## Query: "${sanitizeForDisplay(search.query)}"`,
           ...search.results.map((result) =>
             [
-              `### ${sanitizeForJson(result.date)} - ${sanitizeForJson(result.title)}`,
-              sanitizeForJson(result.url),
-              sanitizeForJson(result.snippet),
-              `<scrape_result>`,
-              sanitizeForJson(result.scrapedContent),
-              `</scrape_result>`,
+              `### ${sanitizeForDisplay(result.date)} - ${sanitizeForDisplay(result.title)}`,
+              sanitizeForDisplay(result.url),
+              sanitizeForDisplay(result.snippet),
+              `<content_summary>`,
+              sanitizeForDisplay(result.scrapedContent),
+              `</content_summary>`,
             ].join("\n\n"),
           ),
         ].join("\n\n"),

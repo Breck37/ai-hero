@@ -13,8 +13,33 @@ export function isNewChatCreated(data: unknown): data is {
 }
 
 /**
+ * Clean content for display/logging - replaces problematic characters with spaces
+ */
+export function sanitizeForDisplay(str: string): string {
+  if (typeof str !== "string") {
+    return String(str);
+  }
+
+  return (
+    str
+      // Replace control characters with spaces (makes content readable)
+      .replace(/[\x00-\x1F\x7F-\x9F]/g, " ")
+      // Replace Unicode line separators with spaces
+      .replace(/[\u2028\u2029]/g, " ")
+      // Replace literal escape sequences that might appear as text
+      .replace(/\\[bfnrtv]/g, " ")
+      // Replace remaining backslashes
+      .replace(/\\/g, " ")
+      // Clean up excessive whitespace
+      .replace(/\s+/g, " ")
+      .trim()
+  );
+}
+
+/**
  * Enhanced JSON sanitization that handles all problematic characters
  * This prevents malformed JSON from corrupting LLM inputs
+ * ONLY use this when embedding content in JSON strings!
  */
 export function sanitizeForJson(str: string): string {
   if (typeof str !== "string") {
@@ -44,7 +69,31 @@ export function sanitizeForJson(str: string): string {
 }
 
 /**
+ * Attempts to clean and fix common display issues in text content
+ * Use this for content that will be displayed, not embedded in JSON
+ */
+export function cleanTextContent(content: string): string {
+  if (typeof content !== "string") {
+    return String(content);
+  }
+
+  // Start with basic sanitization that removes problematic characters
+  let cleaned = sanitizeForDisplay(content);
+
+  // Remove potential markdown/HTML that might contain unescaped quotes
+  cleaned = cleaned
+    .replace(/```[\s\S]*?```/g, "[code block]")
+    .replace(/<[^>]*>/g, "")
+    // Fix common quote issues (replace smart quotes with regular ones)
+    .replace(/['']/g, "'")
+    .replace(/[""]/g, '"');
+
+  return cleaned.trim();
+}
+
+/**
  * Attempts to clean and fix common JSON issues in text content
+ * Use this ONLY when preparing content to be embedded in JSON
  */
 export function cleanJsonContent(content: string): string {
   if (typeof content !== "string") {
@@ -82,13 +131,13 @@ export function extractSafeTextContent(parts: any[]): string {
 
   return parts
     .filter((part) => part && typeof part === "object" && part.type === "text")
-    .map((part) => cleanJsonContent(part.text || ""))
+    .map((part) => cleanTextContent(part.text || ""))
     .join(" ")
     .trim();
 }
 
 /**
- * Safely processes scraped content to prevent JSON corruption
+ * Safely processes scraped content for display and processing
  */
 export function sanitizeScrapedContent(content: string): string {
   if (!content || typeof content !== "string") {
@@ -102,8 +151,8 @@ export function sanitizeScrapedContent(content: string): string {
       ? content.substring(0, maxLength) + "...[content truncated]"
       : content;
 
-  // Apply comprehensive cleaning
-  processed = cleanJsonContent(processed);
+  // Apply comprehensive cleaning for display
+  processed = cleanTextContent(processed);
 
   // Additional checks for scraped content
   processed = processed
@@ -187,7 +236,7 @@ export function repairJsonContent(content: string): {
     return { repaired, issues: 0 };
   }
 
-  // Apply comprehensive cleaning
+  // Apply comprehensive cleaning for JSON contexts
   repaired = cleanJsonContent(repaired);
 
   // Additional intelligent repairs
@@ -214,23 +263,16 @@ export function repairJsonContent(content: string): {
 }
 
 /**
- * Validates and repairs content before sending to LLM
+ * Validates and cleans content before sending to LLM
+ * LLM prompts are strings, not JSON, so we just need display cleaning
  */
 export function prepareLLMContent(content: string): string {
   if (!content || typeof content !== "string") {
     return "";
   }
 
-  // First, detect and repair any JSON issues
-  const { repaired, issues } = repairJsonContent(content);
-
-  if (issues > 0) {
-    console.warn(
-      `Repaired ${issues} JSON issues in content before sending to LLM`,
-    );
-  }
-
-  return repaired;
+  // Clean for display - no JSON escaping needed for LLM prompts
+  return cleanTextContent(content);
 }
 
 /**

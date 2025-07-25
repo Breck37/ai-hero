@@ -10,5 +10,5 @@ export type SearchResult = {
   title: string;
   url: string;
   snippet: string;
-  scrapedContent: string;
+  scrapedContent: string; // Contains AI-generated summary of the scraped URL content
 };
