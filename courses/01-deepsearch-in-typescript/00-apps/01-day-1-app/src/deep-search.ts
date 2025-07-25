@@ -51,7 +51,7 @@ export const streamFromDeepSearch = (opts: {
   onFinish: Parameters<typeof streamText>[0]["onFinish"];
   telemetry: TelemetrySettings;
   useSearchGrounding?: boolean;
-  writeMessageAnnotation?: (annotation: OurMessageAnnotation) => void;
+  writeMessageAnnotation: (annotation: OurMessageAnnotation) => void;
   locationHints?: import("./types").LocationHints;
 }): Promise<StreamTextResult<{}, string>> => {
   const currentDateTime = getCurrentDateTime();
@@ -72,13 +72,13 @@ You have native search grounding capabilities, so you'll automatically search wh
     );
   } else {
     // Use the new agent loop
-    return runAgentLoop(
-      opts.messages,
-      opts.onFinish,
-      opts.writeMessageAnnotation,
-      opts.telemetry.metadata?.langfuseTraceId?.toString(),
-      opts.locationHints,
-    );
+    return runAgentLoop({
+      messages: opts.messages,
+      writeMessageAnnotation: opts.writeMessageAnnotation,
+      onFinish: opts.onFinish,
+      langfuseTraceId: opts.telemetry.metadata?.langfuseTraceId?.toString(),
+      locationHints: opts.locationHints,
+    });
   }
 };
 
@@ -126,6 +126,7 @@ export async function askDeepSearch(messages: Message[]) {
     telemetry: {
       isEnabled: false,
     },
+    writeMessageAnnotation: () => {}, // Provide a dummy function
   });
 
   // Consume the stream - without this,
