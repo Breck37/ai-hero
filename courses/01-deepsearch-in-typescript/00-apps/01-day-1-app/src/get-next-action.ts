@@ -2,15 +2,12 @@ import { z } from "zod";
 import { generateObject } from "ai";
 import { model } from "../model";
 import type { SystemContext } from "./system-context";
-import type { SearchResult } from "./types";
 import { safeJsonParse } from "./utils";
 
-type SearchAction = {
-  type: "search";
-  query: string;
+type ContinueAction = {
+  type: "continue";
   title: string;
   reasoning: string;
-  results: SearchResult[];
 };
 
 type AnswerAction = {
@@ -26,39 +23,21 @@ type ErrorAction = {
   reasoning?: string;
 };
 
-type Action = SearchAction | AnswerAction | ErrorAction;
+type Action = ContinueAction | AnswerAction | ErrorAction;
 
 export type { Action, ErrorAction };
 export const actionSchema = z.object({
-  type: z.enum(["search", "answer"]).describe(
+  type: z.enum(["continue", "answer"]).describe(
     `The type of action to take.
-      - 'search': Search the web for more information, returning URLs, snippets, and scraped content.
+      - 'continue': Continue searching for more information to better answer the user's question.
       - 'answer': Answer the user's question and complete the loop.`,
   ),
   title: z
     .string()
     .describe(
-      "The title of the action, to be displayed in the UI. Be extremely concise. 'Searching Saka's injury history', 'Comparing toaster ovens'",
+      "The title of the action, to be displayed in the UI. Be extremely concise. 'Continuing research', 'Providing answer'",
     ),
   reasoning: z.string().describe("The reason you chose this step."),
-  query: z
-    .string()
-    .describe("The query to search for. Required if type is 'search'.")
-    .optional(),
-  results: z
-    .array(
-      z.object({
-        date: z.string(),
-        title: z.string(),
-        url: z.string(),
-        snippet: z.string(),
-        scrapedContent: z.string(),
-      }),
-    )
-    .describe(
-      "The search results, including scraped content. Required if type is 'search'.",
-    )
-    .optional(),
 });
 
 export const getNextAction = async (
@@ -73,30 +52,34 @@ export const getNextAction = async (
       system: `
 Respond ONLY with a valid JSON object matching the schema provided. Do not include any commentary or extra text.
 
-You are a helpful assistant that can search the web (and always scrape the results) or answer the user's question.
+You are a helpful assistant that decides whether to continue searching for more information or to provide an answer to the user's question.
 
 ${context.getLocationPrompt()}
 
-🔧 MANDATORY SEARCH WORKFLOW:
-1. Use 'search' to find relevant URLs (aim for 2+ sources) and always scrape the full content from each result.
-2. ONLY THEN: Use 'answer' to provide a detailed answer based on the scraped content.
+🔧 DECISION WORKFLOW:
+- Use 'continue' when you need more information to provide a comprehensive answer
+- Use 'answer' when you have sufficient information to provide a detailed, well-researched answer
 
-💡 Search when users ask about:
-• Current events, news, or recent developments
-• Time-sensitive factual information  
-• Specific products, companies, or people
-• Recommendations or reviews
-• Weather, sports, or real-time data
-• Location-based queries (restaurants, events, services near the user)
+💡 Continue searching when:
+• You have limited or no search results
+• The available information is incomplete or outdated
+• You need to verify facts or get multiple perspectives
+• The question requires current information that may not be in your results
+• You need to fill gaps in your understanding
+
+💡 Answer when:
+• You have comprehensive search results from multiple sources
+• The information is sufficient to provide a complete answer
+• You have verified the information and can cite sources
+• You've reached the maximum number of search iterations (10 steps)
 
 ⚡ CRITICAL RULES:
-- NEVER answer without first searching and scraping
-- Search snippets are NOT enough - you MUST scrape the full content
-- Always follow the 2-step process: search (with scrape) → answer
-- Consider the conversation history when making decisions - follow-up questions should build on previous context
-- For location-based queries, include the user's location in your search terms
+- Consider the conversation history when making decisions
+- For follow-up questions, evaluate if you need more specific information
+- Always prioritize providing accurate, well-sourced answers
+- Don't continue searching indefinitely - know when you have enough information
 
-🎯 PRO TIP: Cite sources with inline links and provide details from multiple perspectives when possible!
+🎯 PRO TIP: It's better to provide a comprehensive answer with good sources than to keep searching indefinitely!
 `,
       prompt: `
 Conversation History:
@@ -105,12 +88,14 @@ ${context.getConversationHistory()}
 Current User Question: ${context.getUserQuestion()}
 
 DECISION RULES:
-- If you have NO search results yet → use 'search'
-- If you have search results → use 'answer'
+- If you have NO search results yet → use 'continue'
+- If you have search results but need more information → use 'continue'
+- If you have sufficient information to answer → use 'answer'
 - For follow-up questions, consider if you need to search for more specific information
 
 Current state:
 - Search results: ${context.hasSearchResults() ? "Available" : "None"}
+- Step: ${context.getStep()}
 
 Here is the research context:
 

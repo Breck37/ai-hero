@@ -1,6 +1,7 @@
 import { type StreamTextResult, type Message, streamText } from "ai";
 import { SystemContext } from "./system-context";
 import { getNextAction, type Action } from "./get-next-action";
+import { queryRewriter, type QueryRewriterResult } from "./query-rewriter";
 import { answerQuestion } from "./answer-question";
 import { searchSerper } from "./serper";
 import { bulkCrawlWebsites } from "./scraper";
@@ -12,6 +13,7 @@ import { recordError } from "./server/db/queries";
 export type OurMessageAnnotation = {
   type: "NEW_ACTION";
   action: Action;
+  queryPlan?: QueryRewriterResult;
 };
 
 // Copy of the search function from deep-search.ts
@@ -85,7 +87,7 @@ export const runAgentLoop = async ({
   // A loop that continues until we have an answer
   // or we've taken 10 actions
   while (!ctx.shouldStop()) {
-    // We choose the next action based on the state of our system
+    // First, determine if we should continue searching or answer
     const nextAction = await getNextAction(ctx, langfuseTraceId);
 
     // Send annotation about the action that was chosen
@@ -122,66 +124,89 @@ export const runAgentLoop = async ({
       break;
     }
 
-    // We execute the action and update the state of our system
-    if (nextAction.type === "search") {
-      if (!nextAction.query) {
-        throw new Error("Search action requires a query");
-      }
-
-      // Fetch search results
-      const searchResults = await searchWeb(nextAction.query);
-      // Scrape each URL
-      const urls = searchResults.map((result) => result.link);
-      const scrapeResults = await scrapeUrl(urls);
-
-      // Get conversation history for summarization context
-      const conversationHistory = ctx.getConversationHistory();
-
-      // Summarize each successful scrape result in parallel
-      const summaryPromises = searchResults.map(async (result) => {
-        const scrape = scrapeResults.find((s) => s.url === result.link);
-
-        if (scrape && scrape.success) {
-          try {
-            const summary = await summarizeURL({
-              conversationHistory,
-              scrapedContent: scrape.data,
-              searchMetadata: {
-                date: result.date || "Unknown",
-                title: result.title,
-                url: result.link,
-                snippet: result.snippet,
-              },
-              query: nextAction.query,
-              langfuseTraceId,
-            });
-            return summary;
-          } catch (error) {
-            console.error("Summarization failed for", result.link, error);
-            return scrape.data; // Fallback to original content
-          }
-        } else {
-          return scrape ? `Error: ${scrape.error}` : "No scrape result";
-        }
-      });
-
-      const summaries = await Promise.all(summaryPromises);
-
-      // Combine search and summarized results
-      const combinedResults = searchResults.map((result, index) => ({
-        date: result.date || "Unknown",
-        title: result.title,
-        url: result.link,
-        snippet: result.snippet,
-        scrapedContent: summaries[index] || "No content available",
-      }));
-
-      ctx.reportSearch({
-        query: nextAction.query,
-        results: combinedResults,
-      });
-    } else if (nextAction.type === "answer") {
+    // If we should answer, do so immediately
+    if (nextAction.type === "answer") {
       return answerQuestion(ctx, { onFinish, langfuseTraceId });
+    }
+
+    // If we should continue, generate queries and search
+    if (nextAction.type === "continue") {
+      // Generate queries using the query rewriter
+      const queryPlan = await queryRewriter(ctx, langfuseTraceId);
+
+      // Send annotation with the query plan
+      writeMessageAnnotation({
+        type: "NEW_ACTION",
+        action: nextAction as Action,
+        queryPlan,
+      } satisfies OurMessageAnnotation);
+
+      // Execute all queries in parallel for maximum speed
+      const searchPromises = queryPlan.queries.map(async (query) => {
+        // Fetch search results
+        const searchResults = await searchWeb(query);
+        // Scrape each URL
+        const urls = searchResults.map((result) => result.link);
+        const scrapeResults = await scrapeUrl(urls);
+
+        // Get conversation history for summarization context
+        const conversationHistory = ctx.getConversationHistory();
+
+        // Summarize each successful scrape result in parallel
+        const summaryPromises = searchResults.map(async (result) => {
+          const scrape = scrapeResults.find((s) => s.url === result.link);
+
+          if (scrape && scrape.success) {
+            try {
+              const summary = await summarizeURL({
+                conversationHistory,
+                scrapedContent: scrape.data,
+                searchMetadata: {
+                  date: result.date || "Unknown",
+                  title: result.title,
+                  url: result.link,
+                  snippet: result.snippet,
+                },
+                query: query,
+                langfuseTraceId,
+              });
+              return summary;
+            } catch (error) {
+              console.error("Summarization failed for", result.link, error);
+              return scrape.data; // Fallback to original content
+            }
+          } else {
+            return scrape ? `Error: ${scrape.error}` : "No scrape result";
+          }
+        });
+
+        const summaries = await Promise.all(summaryPromises);
+
+        // Combine search and summarized results
+        const combinedResults = searchResults.map((result, index) => ({
+          date: result.date || "Unknown",
+          title: result.title,
+          url: result.link,
+          snippet: result.snippet,
+          scrapedContent: summaries[index] || "No content available",
+        }));
+
+        return {
+          query,
+          results: combinedResults,
+        };
+      });
+
+      // Wait for all searches to complete
+      const searchResults = await Promise.all(searchPromises);
+
+      // Report all search results to the context
+      searchResults.forEach(({ query, results }) => {
+        ctx.reportSearch({
+          query,
+          results,
+        });
+      });
     }
 
     // We increment the step counter

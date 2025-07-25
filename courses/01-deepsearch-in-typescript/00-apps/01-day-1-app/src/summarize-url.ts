@@ -1,7 +1,6 @@
 import { generateText } from "ai";
 import { summaryModel } from "../model";
 import { cacheWithRedis } from "./server/redis/redis";
-import type { SearchResult } from "./types";
 
 interface SummarizeURLParams {
   conversationHistory: string;

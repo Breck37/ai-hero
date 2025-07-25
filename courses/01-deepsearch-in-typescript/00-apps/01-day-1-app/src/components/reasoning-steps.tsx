@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { SearchIcon, LinkIcon, ChevronDownIcon } from "lucide-react";
+import { SearchIcon, ChevronDownIcon, BrainIcon } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import type { OurMessageAnnotation } from "../run-agent-loop";
 
@@ -55,50 +55,62 @@ export const ReasoningSteps = ({
                   <div className="text-sm leading-relaxed text-purple-200/90">
                     <ReactMarkdown>{annotation.action.reasoning}</ReactMarkdown>
                   </div>
-                  {annotation.action.type === "search" && (
-                    <div className="mt-3 flex flex-col gap-2">
-                      <div className="flex items-center gap-2 rounded-md bg-purple-950/40 px-2 py-1.5 text-sm text-purple-300/80">
-                        <SearchIcon className="size-4 text-purple-400" />
-                        <span className="font-mono text-xs">
-                          {annotation.action.query}
-                        </span>
-                      </div>
-                      {annotation.action.results &&
-                        annotation.action.results.length > 0 && (
-                          <div className="mt-2">
-                            {annotation.action.results.map((result, idx) => (
-                              <div
-                                key={idx}
-                                className="mb-2 rounded border border-purple-500/20 bg-purple-950/30 p-2"
-                              >
-                                <div className="font-semibold text-purple-200">
-                                  <a
-                                    href={result.url}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="underline"
-                                  >
-                                    {result.title}
-                                  </a>
-                                  <span className="ml-2 text-xs text-purple-400">
-                                    {result.date}
-                                  </span>
-                                </div>
-                                <div className="mt-1 text-xs text-purple-300">
-                                  {result.snippet}
-                                </div>
-                                <div className="mt-2 text-xs text-purple-400">
-                                  Scraped Content:
-                                </div>
-                                <div className="overflow-y-auto whitespace-pre-line rounded bg-purple-950/60 p-2 text-xs text-purple-100">
-                                  {result.scrapedContent}
-                                </div>
-                              </div>
-                            ))}
+
+                  {/* Show query plan for continue actions */}
+                  {annotation.action.type === "continue" &&
+                    annotation.queryPlan && (
+                      <div className="mt-3 flex flex-col gap-2">
+                        <div className="flex items-center gap-2 rounded-md bg-purple-950/40 px-2 py-1.5 text-sm text-purple-300/80">
+                          <BrainIcon className="size-4 text-purple-400" />
+                          <span className="font-semibold">Research Plan</span>
+                        </div>
+                        <div className="rounded border border-purple-500/20 bg-purple-950/30 p-2">
+                          <ReactMarkdown className="text-xs text-purple-200">
+                            {annotation.queryPlan.plan}
+                          </ReactMarkdown>
+                        </div>
+
+                        <div className="flex items-center gap-2 rounded-md bg-purple-950/40 px-2 py-1.5 text-sm text-purple-300/80">
+                          <SearchIcon className="size-4 text-purple-400" />
+                          <span className="font-semibold">Search Queries</span>
+                        </div>
+                        {annotation.queryPlan.queries.map((query, idx) => (
+                          <div
+                            key={idx}
+                            className="rounded border border-purple-500/20 bg-purple-950/30 p-2"
+                          >
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs font-bold text-purple-400">
+                                {idx + 1}.
+                              </span>
+                              <span className="font-mono text-xs text-purple-200">
+                                {query}
+                              </span>
+                            </div>
                           </div>
-                        )}
-                    </div>
-                  )}
+                        ))}
+                      </div>
+                    )}
+
+                  {/* Show action type indicator */}
+                  <div className="mt-2 flex items-center gap-2">
+                    <span className="text-xs text-purple-400">Action:</span>
+                    <span
+                      className={`rounded px-2 py-1 text-xs font-semibold ${
+                        annotation.action.type === "continue"
+                          ? "bg-blue-500/20 text-blue-300"
+                          : annotation.action.type === "answer"
+                            ? "bg-green-500/20 text-green-300"
+                            : "bg-red-500/20 text-red-300"
+                      }`}
+                    >
+                      {annotation.action.type === "continue"
+                        ? "Continue Research"
+                        : annotation.action.type === "answer"
+                          ? "Provide Answer"
+                          : "Error"}
+                    </span>
+                  </div>
                 </div>
               </div>
             </li>

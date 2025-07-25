@@ -23,7 +23,7 @@ export const env = createEnv({
     LANGFUSE_SECRET_KEY: z.string(),
     LANGFUSE_PUBLIC_KEY: z.string(),
     LANGFUSE_BASEURL: z.string().url(),
-    SEARCH_RESULTS_COUNT: z.coerce.number().default(3),
+    SEARCH_RESULTS_COUNT: z.coerce.number().default(5),
   },
 
   /**
