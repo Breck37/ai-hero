@@ -151,14 +151,13 @@ export async function POST(request: Request) {
     output: { success: true },
   });
 
-  // Set up title generation for new chats
+  // Set up title generation for new chats only
   let titlePromise: Promise<string> | undefined;
 
   if (isNewChat) {
     titlePromise = generateChatTitle(messages);
-  } else {
-    titlePromise = Promise.resolve("");
   }
+  // For existing chats, don't generate a title - keep the existing one
 
   // Database call: Create or update the chat immediately with the current messages
   // This ensures we save the user's message even if the stream fails
@@ -274,7 +273,19 @@ export async function POST(request: Request) {
               }
 
               // Resolve the title promise if it exists
-              const title = titlePromise ? await titlePromise : undefined;
+              let title: string | undefined;
+              if (titlePromise) {
+                try {
+                  title = await titlePromise;
+                  // Ensure the title is valid
+                  if (!title || !title.trim()) {
+                    title = undefined;
+                  }
+                } catch (error) {
+                  console.error("Failed to generate chat title:", error);
+                  title = undefined;
+                }
+              }
 
               // Database call: Save the updated messages to the database
               const finalUpsertSpan = trace.span({
@@ -290,7 +301,7 @@ export async function POST(request: Request) {
               await upsertChat({
                 userId,
                 chatId,
-                ...(title ? { title } : {}), // Only save the title if it's not empty
+                ...(title && title.trim() ? { title: title.trim() } : {}), // Only save the title if it's not empty or whitespace
                 messages: updatedMessages,
               });
 

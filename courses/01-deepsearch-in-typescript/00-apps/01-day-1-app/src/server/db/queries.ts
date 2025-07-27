@@ -142,9 +142,9 @@ export async function upsertChat(opts: {
       updatedAt: new Date(),
     };
 
-    if (title) {
-      // Store titles as-is for clean UI display
-      updateData.title = title;
+    if (title && title.trim()) {
+      // Store titles as-is for clean UI display, but only if not empty/whitespace
+      updateData.title = title.trim();
     }
 
     await db.update(chats).set(updateData).where(eq(chats.id, chatId));
