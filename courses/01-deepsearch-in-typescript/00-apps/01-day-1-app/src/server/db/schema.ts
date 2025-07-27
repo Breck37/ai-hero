@@ -156,6 +156,12 @@ export const chats = createTable(
       .notNull()
       .references(() => users.id),
     title: varchar("title", { length: 255 }).notNull(),
+    useSearchGrounding: boolean("use_search_grounding")
+      .notNull()
+      .default(false),
+    useTavily: boolean("use_tavily")
+      .notNull()
+      .default(true), // Default to Tavily since it's the new implementation
     createdAt: timestamp("created_at", {
       mode: "date",
       withTimezone: true,

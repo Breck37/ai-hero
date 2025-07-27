@@ -52,6 +52,7 @@ export const streamFromDeepSearch = (opts: {
   onFinish: Parameters<typeof streamText>[0]["onFinish"];
   telemetry: TelemetrySettings;
   useSearchGrounding?: boolean;
+  useTavily?: boolean;
   writeMessageAnnotation: (annotation: OurMessageAnnotation) => void;
   locationHints?: LocationHints;
   chatId?: string;
@@ -83,6 +84,7 @@ You have native search grounding capabilities, so you'll automatically search wh
       locationHints: opts.locationHints,
       chatId: opts.chatId,
       userId: opts.userId,
+      useTavily: opts.useTavily,
     });
   }
 };

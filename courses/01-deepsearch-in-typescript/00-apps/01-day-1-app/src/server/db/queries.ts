@@ -122,9 +122,18 @@ export async function upsertChat(opts: {
   userId: string;
   chatId: string;
   title?: string;
+  useSearchGrounding?: boolean;
+  useTavily?: boolean;
   messages: Message[];
 }) {
-  const { userId, chatId, title, messages: messageList } = opts;
+  const {
+    userId,
+    chatId,
+    title,
+    useSearchGrounding,
+    useTavily,
+    messages: messageList,
+  } = opts;
 
   // Check if the chat exists and belongs to the user
   const existingChat = await db
@@ -138,13 +147,26 @@ export async function upsertChat(opts: {
     await db.delete(messages).where(eq(messages.chatId, chatId));
 
     // Update the chat title and timestamp (only if title is provided)
-    const updateData: { updatedAt: Date; title?: string } = {
+    const updateData: {
+      updatedAt: Date;
+      title?: string;
+      useSearchGrounding?: boolean;
+      useTavily?: boolean;
+    } = {
       updatedAt: new Date(),
     };
 
     if (title && title.trim()) {
       // Store titles as-is for clean UI display, but only if not empty/whitespace
       updateData.title = title.trim();
+    }
+
+    if (useSearchGrounding !== undefined) {
+      updateData.useSearchGrounding = useSearchGrounding;
+    }
+
+    if (useTavily !== undefined) {
+      updateData.useTavily = useTavily;
     }
 
     await db.update(chats).set(updateData).where(eq(chats.id, chatId));
@@ -155,10 +177,13 @@ export async function upsertChat(opts: {
       userId,
       // Store titles as-is for clean UI display
       title: title || "New Chat",
+      useSearchGrounding: useSearchGrounding ?? false,
+      useTavily: useTavily ?? true, // Default to Tavily
     });
   }
 
   // Insert all messages WITHOUT sanitization (preserve original content for UI)
+  // Only insert messages if we have them (not just updating settings)
   if (messageList.length > 0) {
     const messageValues = messageList.map((message, index) => {
       // Ensure we always have proper parts, but don't sanitize content

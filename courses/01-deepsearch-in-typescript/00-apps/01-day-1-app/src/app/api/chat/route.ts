@@ -7,6 +7,7 @@ import {
   isUserAdmin,
   upsertChat,
   recordError,
+  getChat,
 } from "~/server/db/queries";
 import { Langfuse } from "langfuse";
 import { env } from "~/env";
@@ -76,6 +77,7 @@ export async function POST(request: Request) {
   const body = (await request.json()) as {
     messages: Array<Message>;
     useSearchGrounding?: boolean;
+    useTavily?: boolean;
     chatId: string;
     isNewChat?: boolean;
   };
@@ -83,6 +85,7 @@ export async function POST(request: Request) {
   const {
     messages,
     useSearchGrounding = false,
+    useTavily = true, // Default to Tavily
     chatId,
     isNewChat = false,
   } = body;
@@ -151,6 +154,23 @@ export async function POST(request: Request) {
     output: { success: true },
   });
 
+  // Get chat settings from database for existing chats
+  let chatUseSearchGrounding = useSearchGrounding;
+  let chatUseTavily = useTavily;
+
+  if (!isNewChat) {
+    try {
+      const existingChat = await getChat(chatId, userId);
+      if (existingChat) {
+        chatUseSearchGrounding = existingChat.useSearchGrounding ?? useSearchGrounding;
+        chatUseTavily = existingChat.useTavily ?? useTavily;
+      }
+    } catch (error) {
+      console.error("Failed to get chat settings:", error);
+      // Use the provided defaults if we can't get the chat settings
+    }
+  }
+
   // Set up title generation for new chats only
   let titlePromise: Promise<string> | undefined;
 
@@ -175,6 +195,8 @@ export async function POST(request: Request) {
     userId,
     chatId,
     title: "Generating...",
+    useSearchGrounding: chatUseSearchGrounding,
+    useTavily: chatUseTavily,
     messages,
   });
 
@@ -232,6 +254,8 @@ export async function POST(request: Request) {
         userId,
         chatId,
         title: "Generating...",
+        useSearchGrounding: chatUseSearchGrounding,
+        useTavily: chatUseTavily,
         messages: messages, // This includes the user's new message
       });
 
@@ -240,10 +264,11 @@ export async function POST(request: Request) {
       try {
         agentResult = await streamFromDeepSearch({
           messages,
-          useSearchGrounding,
+          useSearchGrounding: chatUseSearchGrounding,
+          useTavily: chatUseTavily,
           telemetry: {
             isEnabled: true,
-            functionId: useSearchGrounding ? `grounded-agent` : `hero-agent`,
+            functionId: chatUseSearchGrounding ? `grounded-agent` : `hero-agent`,
             metadata: {
               langfuseTraceId: trace.id,
             },
@@ -302,6 +327,8 @@ export async function POST(request: Request) {
                 userId,
                 chatId,
                 ...(title && title.trim() ? { title: title.trim() } : {}), // Only save the title if it's not empty or whitespace
+                useSearchGrounding: chatUseSearchGrounding,
+                useTavily: chatUseTavily,
                 messages: updatedMessages,
               });
 

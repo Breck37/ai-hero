@@ -1,7 +1,7 @@
 import { cacheWithRedis } from "~/server/redis/redis";
 import { env } from "~/env.js";
 
-export declare namespace SerperTool {
+export declare namespace ManualSearchTool {
   export type SearchInput = {
     q: string;
     num: number;
@@ -62,7 +62,7 @@ const fetchFromSerper = cacheWithRedis(
   async (
     url: string,
     options: Omit<RequestInit, "headers"> & { signal: AbortSignal | undefined },
-  ): Promise<SerperTool.SearchResult> => {
+  ): Promise<ManualSearchTool.SearchResult> => {
     const response = await fetch(`https://google.serper.dev${url}`, {
       ...options,
       headers: {
@@ -76,16 +76,16 @@ const fetchFromSerper = cacheWithRedis(
       throw new Error(await response.text());
     }
 
-    const json = (await response.json()) as SerperTool.SearchResult;
+    const json = (await response.json()) as ManualSearchTool.SearchResult;
 
     return json;
   },
 );
 
 export const searchSerper = async (
-  body: SerperTool.SearchInput,
+  body: ManualSearchTool.SearchInput,
   signal: AbortSignal | undefined,
-): Promise<SerperTool.SearchResult> => {
+): Promise<ManualSearchTool.SearchResult> => {
   const results = await fetchFromSerper(`/search`, {
     method: "POST",
     body: JSON.stringify(body),
@@ -93,4 +93,4 @@ export const searchSerper = async (
   });
 
   return results;
-};
+}; 
