@@ -1,9 +1,27 @@
 import { generateText } from "ai";
 import { model } from "../model";
 import type { Message } from "ai";
+import { extractSafeTextContent, cleanTextContent } from "./utils";
 
 export const generateChatTitle = async (messages: Message[]) => {
   try {
+    // Extract text content from messages safely
+    const messageTexts = messages
+      .map((msg) => {
+        if (msg.content && msg.content.trim()) {
+          return cleanTextContent(msg.content);
+        } else if (msg.parts && Array.isArray(msg.parts)) {
+          return extractSafeTextContent(msg.parts);
+        }
+        return "";
+      })
+      .filter((text) => text.trim().length > 0);
+
+    // If no valid messages, return default title
+    if (messageTexts.length === 0) {
+      return "New Chat";
+    }
+
     const { text } = await generateText({
       model,
       system: `You are a chat title generator.
@@ -15,7 +33,7 @@ export const generateChatTitle = async (messages: Message[]) => {
         `,
       prompt: `Here is the chat history:
 
-        ${messages.map((m) => m.content).join("\n")}
+        ${messageTexts.join("\n")}
       `,
     });
 

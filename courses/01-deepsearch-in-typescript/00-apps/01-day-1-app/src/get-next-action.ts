@@ -92,8 +92,7 @@ ${context.getLocationPrompt()}
 - For follow-up questions, evaluate if you need more specific information
 - Always prioritize providing accurate, well-sourced answers
 - Don't continue searching indefinitely - know when you have enough information
-- Provide detailed feedback if the next action is 'continue'. This feedback about what specific information is missing or what could be improved. If you feel
-it to be important, provide feedback even if the next action is 'answer'.
+- Provide detailed feedback about what specific information is missing or what could be improved. If you feel it to be important, provide feedback even if the next action is 'answer'.
 
 🎯 PRO TIP: It's better to provide a comprehensive answer with good sources than to keep searching indefinitely!
 `,
@@ -108,6 +107,8 @@ DECISION RULES:
 - If you have search results but need more information → use 'continue'
 - If you have sufficient information to answer → use 'answer'
 - For follow-up questions, consider if you need to search for more specific information
+
+IMPORTANT: You MUST provide detailed feedback in the 'feedback' field about what information is missing, what could be improved, or what specific gaps need to be filled. This feedback is crucial for guiding the next search iteration.
 
 Current state:
 - Search results: ${context.hasSearchResults() ? "Available" : "None"}

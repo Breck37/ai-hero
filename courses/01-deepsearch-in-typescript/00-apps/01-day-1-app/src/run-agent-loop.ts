@@ -165,32 +165,36 @@ export const runAgentLoop = async ({
       });
     });
 
-    // Send annotation about the search step
-    writeMessageAnnotation({
-      type: "NEW_ACTION",
-      action: {
-        type: "continue",
-        title: "Searching for information",
-        reasoning: `Executed ${queryPlan.queries.length} search queries to gather information`,
-        feedback: "Search completed, evaluating results...",
-      } as Action,
-      queryPlan,
-    } satisfies OurMessageAnnotation);
-
     // 4. Decide whether to continue by calling getNextAction
     const nextAction = await getNextAction(ctx, langfuseTraceId);
+
+    // Debug logging for feedback
+    console.log("getNextAction result:", {
+      type: nextAction.type,
+      title: nextAction.title,
+      hasFeedback: "feedback" in nextAction,
+      feedback: nextAction.feedback,
+    });
 
     // Store the feedback in the system context for the next iteration
     if ("feedback" in nextAction && nextAction.feedback) {
       ctx.setLastFeedback(nextAction.feedback);
+      console.log("Stored feedback in context:", nextAction.feedback);
     }
 
-    // Send annotation about the evaluation step
+    // Send annotation about the search and evaluation step
     writeMessageAnnotation({
       type: "NEW_ACTION",
-      action: nextAction,
+      action: {
+        type: nextAction.type,
+        title: nextAction.title,
+        reasoning: nextAction.reasoning,
+        feedback: nextAction.feedback,
+      } as Action,
       queryPlan,
     } satisfies OurMessageAnnotation);
+
+    console.log("Sent annotation with feedback:", nextAction.feedback);
 
     // Handle error action
     if (nextAction.type === "error") {
