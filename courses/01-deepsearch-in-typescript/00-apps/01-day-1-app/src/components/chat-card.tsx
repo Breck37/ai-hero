@@ -66,15 +66,15 @@ export const ChatCard = ({
               <span className="text-xs font-medium text-gray-300">
                 Search Mode:
               </span>
-                             <div className="group relative">
-                 <Info className="h-3 w-3 text-gray-400 hover:text-gray-300 cursor-help" />
-                 <div className="absolute bottom-full left-1/2 z-10 mb-2 w-48 -translate-x-1/2 transform rounded bg-gray-900 px-2 py-1 text-xs text-white opacity-0 transition-opacity group-hover:opacity-100 pointer-events-none">
-                   <strong>External Tool:</strong> More control, shows search
-                   process
-                   <br />
-                   <strong>Search Grounding:</strong> Faster, native model search
-                 </div>
-               </div>
+              <div className="group relative">
+                <Info className="h-3 w-3 text-gray-400 hover:text-gray-300" />
+                <div className="pointer-events-none absolute bottom-full left-1/2 z-10 mb-2 w-48 -translate-x-1/2 transform rounded bg-gray-900 px-2 py-1 text-xs text-white opacity-0 transition-opacity group-hover:opacity-100">
+                  <strong>External Tool:</strong> More control, shows search
+                  process
+                  <br />
+                  <strong>Search Grounding:</strong> Faster, native model search
+                </div>
+              </div>
             </div>
             <div className="flex items-center gap-1">
               <button
@@ -108,9 +108,9 @@ export const ChatCard = ({
               <span className="text-xs font-medium text-gray-300">
                 Search Method:
               </span>
-              <div className="relative">
+              <div className="group relative">
                 <Info className="h-3 w-3 text-gray-400 hover:text-gray-300" />
-                <div className="absolute bottom-full left-1/2 z-10 mb-2 w-48 -translate-x-1/2 transform rounded bg-gray-900 px-2 py-1 text-xs text-white opacity-0 transition-opacity hover:opacity-100">
+                <div className="pointer-events-none absolute bottom-full left-1/2 z-10 mb-2 w-48 -translate-x-1/2 transform rounded bg-gray-900 px-2 py-1 text-xs text-white opacity-0 transition-opacity group-hover:opacity-100">
                   <strong>Tavily:</strong> Faster, single API call
                   <br />
                   <strong>Manual:</strong> More control, separate steps

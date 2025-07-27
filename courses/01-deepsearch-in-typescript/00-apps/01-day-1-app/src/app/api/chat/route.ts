@@ -162,7 +162,8 @@ export async function POST(request: Request) {
     try {
       const existingChat = await getChat(chatId, userId);
       if (existingChat) {
-        chatUseSearchGrounding = existingChat.useSearchGrounding ?? useSearchGrounding;
+        chatUseSearchGrounding =
+          existingChat.useSearchGrounding ?? useSearchGrounding;
         chatUseTavily = existingChat.useTavily ?? useTavily;
       }
     } catch (error) {
@@ -268,7 +269,9 @@ export async function POST(request: Request) {
           useTavily: chatUseTavily,
           telemetry: {
             isEnabled: true,
-            functionId: chatUseSearchGrounding ? `grounded-agent` : `hero-agent`,
+            functionId: chatUseSearchGrounding
+              ? `grounded-agent`
+              : `hero-agent`,
             metadata: {
               langfuseTraceId: trace.id,
             },

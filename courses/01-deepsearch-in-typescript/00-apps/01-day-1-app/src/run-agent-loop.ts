@@ -17,8 +17,6 @@ export type OurMessageAnnotation = {
   queryPlan?: QueryRewriterResult;
 };
 
-
-
 export interface RunAgentLoopArgs {
   messages: Message[];
   writeMessageAnnotation: (annotation: OurMessageAnnotation) => void;
@@ -79,11 +77,14 @@ export const runAgentLoop = async ({
       if (!scrapeResults.success) {
         // Return an array with error information
         return scrapeResults.results.map((r) => ({
-          title: mappedResults.find(m => m.link === r.url)?.title || "Unknown",
+          title:
+            mappedResults.find((m) => m.link === r.url)?.title || "Unknown",
           url: r.url,
-          snippet: mappedResults.find(m => m.link === r.url)?.snippet || "",
-          scrapedContent: r.result.success ? r.result.data : `Error: ${r.result.error}`,
-          date: mappedResults.find(m => m.link === r.url)?.date,
+          snippet: mappedResults.find((m) => m.link === r.url)?.snippet || "",
+          scrapedContent: r.result.success
+            ? r.result.data
+            : `Error: ${r.result.error}`,
+          date: mappedResults.find((m) => m.link === r.url)?.date,
         }));
       }
 
@@ -92,8 +93,8 @@ export const runAgentLoop = async ({
         title: result.title,
         url: result.link,
         snippet: result.snippet,
-        scrapedContent: scrapeResults.results[index]?.result.success 
-          ? scrapeResults.results[index]!.result.data 
+        scrapedContent: scrapeResults.results[index]?.result.success
+          ? scrapeResults.results[index]!.result.data
           : "No content available",
         date: scrapeResults.results[index]?.result.date || result.date,
       }));

@@ -93,4 +93,4 @@ export const searchSerper = async (
   });
 
   return results;
-}; 
+};
