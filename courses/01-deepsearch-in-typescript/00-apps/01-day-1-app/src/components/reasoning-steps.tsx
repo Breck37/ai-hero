@@ -1,5 +1,10 @@
 import { useState } from "react";
-import { SearchIcon, ChevronDownIcon, BrainIcon } from "lucide-react";
+import {
+  SearchIcon,
+  ChevronDownIcon,
+  BrainIcon,
+  MessageSquareIcon,
+} from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import type { OurMessageAnnotation } from "../run-agent-loop";
 
@@ -55,6 +60,23 @@ export const ReasoningSteps = ({
                   <div className="text-sm leading-relaxed text-purple-200/90">
                     <ReactMarkdown>{annotation.action.reasoning}</ReactMarkdown>
                   </div>
+
+                  {/* Show feedback if available */}
+                  {annotation.action.feedback && (
+                    <div className="mt-3 flex flex-col gap-2">
+                      <div className="flex items-center gap-2 rounded-md bg-orange-950/40 px-2 py-1.5 text-sm text-orange-300/80">
+                        <MessageSquareIcon className="size-4 text-orange-400" />
+                        <span className="font-semibold">
+                          Evaluation Feedback
+                        </span>
+                      </div>
+                      <div className="rounded border border-orange-500/20 bg-orange-950/30 p-2">
+                        <ReactMarkdown className="text-xs text-orange-200">
+                          {annotation.action.feedback}
+                        </ReactMarkdown>
+                      </div>
+                    </div>
+                  )}
 
                   {/* Show query plan for continue actions */}
                   {annotation.action.type === "continue" &&

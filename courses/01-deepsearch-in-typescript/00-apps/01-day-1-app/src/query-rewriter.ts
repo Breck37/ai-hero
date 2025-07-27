@@ -29,6 +29,7 @@ export const queryRewriter = async (
   langfuseTraceId?: string,
 ): Promise<QueryRewriterResult> => {
   let result;
+  const lastFeedback = context.getLastFeedback();
   try {
     result = await generateObject({
       model,
@@ -73,7 +74,16 @@ Here is the research context:
 
 ${context.getSearchHistory()}
 
-Please create a research plan and generate search queries to help answer the user's question.`,
+${
+  lastFeedback
+    ? `Previous Evaluation Feedback:
+${lastFeedback}
+
+Use this feedback to improve your search strategy and focus on the specific information gaps identified.`
+    : ""
+}
+
+Please create a research plan and generate search queries to help answer the user's question.${context.getLastFeedback() ? " Pay special attention to the feedback provided above to address the specific information gaps." : ""}`,
       experimental_telemetry: langfuseTraceId
         ? {
             isEnabled: true,
@@ -132,4 +142,4 @@ Please create a research plan and generate search queries to help answer the use
       queries: [context.getUserQuestion()],
     };
   }
-}; 
+};

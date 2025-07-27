@@ -8,12 +8,14 @@ type ContinueAction = {
   type: "continue";
   title: string;
   reasoning: string;
+  feedback: string;
 };
 
 type AnswerAction = {
   type: "answer";
   title: string;
   reasoning: string;
+  feedback: string;
 };
 
 type ErrorAction = {
@@ -21,6 +23,7 @@ type ErrorAction = {
   message: string;
   title?: string;
   reasoning?: string;
+  feedback?: string;
 };
 
 type Action = ContinueAction | AnswerAction | ErrorAction;
@@ -38,6 +41,11 @@ export const actionSchema = z.object({
       "The title of the action, to be displayed in the UI. Be extremely concise. 'Continuing research', 'Providing answer'",
     ),
   reasoning: z.string().describe("The reason you chose this step."),
+  feedback: z
+    .string()
+    .describe(
+      "Detailed feedback about what information is missing, what could be improved, or what specific gaps need to be filled. This feedback will be used to guide the next search iteration. Be specific about what types of information would be most valuable to find next.",
+    ),
 });
 
 export const getNextAction = async (
@@ -50,14 +58,19 @@ export const getNextAction = async (
       model,
       schema: actionSchema,
       system: `
-Respond ONLY with a valid JSON object matching the schema provided. Do not include any commentary or extra text.
+You are a research query optimizer. Your task is to analyze search results against the original research goal and either decide to answer the question or to search for more information.
 
-You are a helpful assistant that decides whether to continue searching for more information or to provide an answer to the user's question.
+PROCESS:
+1. Identify ALL information explicitly requested in the original research goal
+2. Analyze what specific information has been successfully retrieved in the search results
+3. Identify ALL information gaps between what was requested and what was found
+4. For entity-specific gaps: Create targeted queries for each missing attribute of identified entities
+5. For general knowledge gaps: Create focused queries to find the missing conceptual information
 
 ${context.getLocationPrompt()}
 
 🔧 DECISION WORKFLOW:
-- Use 'continue' when you need more information to provide a comprehensive answer
+- Use 'continue' when you need more information to provide a comprehensive answer. Provide feedback about what specific information is missing or what could be improved. If you feel it to be important, provide feedback even if the next action is 'answer'.
 - Use 'answer' when you have sufficient information to provide a detailed, well-researched answer
 
 💡 Continue searching when:
@@ -66,6 +79,7 @@ ${context.getLocationPrompt()}
 • You need to verify facts or get multiple perspectives
 • The question requires current information that may not be in your results
 • You need to fill gaps in your understanding
+- You have feedback about the previous search results that you need to address and think could improve the information you currently have
 
 💡 Answer when:
 • You have comprehensive search results from multiple sources
@@ -78,6 +92,8 @@ ${context.getLocationPrompt()}
 - For follow-up questions, evaluate if you need more specific information
 - Always prioritize providing accurate, well-sourced answers
 - Don't continue searching indefinitely - know when you have enough information
+- Provide detailed feedback if the next action is 'continue'. This feedback about what specific information is missing or what could be improved. If you feel
+it to be important, provide feedback even if the next action is 'answer'.
 
 🎯 PRO TIP: It's better to provide a comprehensive answer with good sources than to keep searching indefinitely!
 `,
@@ -100,6 +116,8 @@ Current state:
 Here is the research context:
 
 ${context.getSearchHistory()}
+
+Please analyze the current information and provide detailed feedback about what's missing or what could be improved.
     `,
       experimental_telemetry: langfuseTraceId
         ? {
@@ -155,6 +173,7 @@ ${context.getSearchHistory()}
     return {
       type: "error",
       message: `Malformed LLM output or JSON error: ${raw || "Unknown error"}`,
+      feedback: "Unable to provide feedback due to system error",
       context: {
         step: context.getStep(),
         hasSearchResults: context.hasSearchResults(),

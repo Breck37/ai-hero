@@ -172,12 +172,25 @@ export const runAgentLoop = async ({
         type: "continue",
         title: "Searching for information",
         reasoning: `Executed ${queryPlan.queries.length} search queries to gather information`,
+        feedback: "Search completed, evaluating results...",
       } as Action,
       queryPlan,
     } satisfies OurMessageAnnotation);
 
     // 4. Decide whether to continue by calling getNextAction
     const nextAction = await getNextAction(ctx, langfuseTraceId);
+
+    // Store the feedback in the system context for the next iteration
+    if ("feedback" in nextAction && nextAction.feedback) {
+      ctx.setLastFeedback(nextAction.feedback);
+    }
+
+    // Send annotation about the evaluation step
+    writeMessageAnnotation({
+      type: "NEW_ACTION",
+      action: nextAction,
+      queryPlan,
+    } satisfies OurMessageAnnotation);
 
     // Handle error action
     if (nextAction.type === "error") {
