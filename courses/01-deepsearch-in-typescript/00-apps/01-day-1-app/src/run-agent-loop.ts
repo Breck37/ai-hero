@@ -1,122 +1,214 @@
 import { type StreamTextResult, type Message, streamText } from "ai";
 import { SystemContext } from "./system-context";
 import { getNextAction, type Action } from "./get-next-action";
+import { queryRewriter, type QueryRewriterResult } from "./query-rewriter";
 import { answerQuestion } from "./answer-question";
-import { searchSerper } from "./serper";
-import { bulkCrawlWebsites } from "./scraper";
+import { searchAndScrapeWithTavily } from "./tavily";
+import { searchSerper } from "./manual-search";
+import { bulkCrawlWebsites } from "./manual-scraper";
+import { summarizeURL } from "./summarize-url";
 import { env } from "./env";
 import type { LocationHints } from "./types";
+import { recordError } from "./server/db/queries";
 
 export type OurMessageAnnotation = {
   type: "NEW_ACTION";
   action: Action;
+  queryPlan?: QueryRewriterResult;
 };
 
-// Copy of the search function from deep-search.ts
-const searchWeb = async (query: string) => {
-  const results = await searchSerper(
-    { q: query, num: env.SEARCH_RESULTS_COUNT },
-    undefined, // abortSignal
-  );
+export interface RunAgentLoopArgs {
+  messages: Message[];
+  writeMessageAnnotation: (annotation: OurMessageAnnotation) => void;
+  onFinish?: Parameters<typeof streamText>[0]["onFinish"];
+  langfuseTraceId?: string;
+  locationHints?: LocationHints;
+  chatId?: string;
+  userId?: string;
+  useTavily?: boolean;
+}
 
-  const mappedResults: Array<{
-    title: string;
-    link: string;
-    snippet: string;
-    date?: string;
-  }> = results.organic.map((result) => ({
-    title: result.title,
-    link: result.link,
-    snippet: result.snippet,
-    date: result.date,
-  }));
-
-  return mappedResults;
-};
-
-// Copy of the scrape function from deep-search.ts
-const scrapeUrl = async (urls: string[]) => {
-  const results = await bulkCrawlWebsites({ urls });
-
-  if (!results.success) {
-    // Return an array with error information
-    return results.results.map((r) => ({
-      url: r.url,
-      success: false,
-      error: r.result.success ? "" : r.result.error,
-      data: r.result.success ? r.result.data : "",
-    }));
-  }
-
-  // Return an array of successful results
-  return results.results.map((r) => ({
-    url: r.url,
-    success: true,
-    data: r.result.data,
-    date: r.result.date,
-    error: "",
-  }));
-};
-
-export const runAgentLoop = async (
-  messages: Message[],
-  onFinish?: Parameters<typeof streamText>[0]["onFinish"],
-  writeMessageAnnotation?: (annotation: OurMessageAnnotation) => void,
-  langfuseTraceId?: string,
-  locationHints?: LocationHints,
-): Promise<StreamTextResult<{}, string>> => {
+export const runAgentLoop = async ({
+  messages,
+  writeMessageAnnotation,
+  onFinish,
+  langfuseTraceId,
+  locationHints,
+  chatId,
+  userId,
+  useTavily = true, // Default to Tavily
+}: RunAgentLoopArgs): Promise<StreamTextResult<{}, string>> => {
   // A persistent container for the state of our system
   const ctx = new SystemContext(messages, locationHints);
+
+  // Combined search and scrape function using either Tavily or manual method
+  const searchAndScrapeWeb = async (query: string) => {
+    if (useTavily) {
+      // Use Tavily for combined search and scrape
+      const results = await searchAndScrapeWithTavily(
+        query,
+        env.SEARCH_RESULTS_COUNT,
+        undefined,
+      );
+      return results.results;
+    } else {
+      // Use manual search and scrape (separate steps)
+      const searchResults = await searchSerper(
+        { q: query, num: env.SEARCH_RESULTS_COUNT },
+        undefined, // abortSignal
+      );
+
+      const mappedResults: Array<{
+        title: string;
+        link: string;
+        snippet: string;
+        date?: string;
+      }> = searchResults.organic.map((result) => ({
+        title: result.title,
+        link: result.link,
+        snippet: result.snippet,
+        date: result.date,
+      }));
+
+      // Scrape each URL
+      const urls = mappedResults.map((result) => result.link);
+      const scrapeResults = await bulkCrawlWebsites({ urls });
+
+      if (!scrapeResults.success) {
+        // Return an array with error information
+        return scrapeResults.results.map((r) => ({
+          title:
+            mappedResults.find((m) => m.link === r.url)?.title || "Unknown",
+          url: r.url,
+          snippet: mappedResults.find((m) => m.link === r.url)?.snippet || "",
+          scrapedContent: r.result.success
+            ? r.result.data
+            : `Error: ${r.result.error}`,
+          date: mappedResults.find((m) => m.link === r.url)?.date,
+        }));
+      }
+
+      // Return an array of successful results
+      return mappedResults.map((result, index) => ({
+        title: result.title,
+        url: result.link,
+        snippet: result.snippet,
+        scrapedContent: scrapeResults.results[index]?.result.success
+          ? scrapeResults.results[index]!.result.data
+          : "No content available",
+        date: scrapeResults.results[index]?.result.date || result.date,
+      }));
+    }
+  };
 
   // A loop that continues until we have an answer
   // or we've taken 10 actions
   while (!ctx.shouldStop()) {
-    // We choose the next action based on the state of our system
-    const nextAction = await getNextAction(ctx, langfuseTraceId);
+    // 1. Run the query rewriter
+    const queryPlan = await queryRewriter(ctx, langfuseTraceId);
 
-    // Send annotation about the action that was chosen
-    if (writeMessageAnnotation) {
-      writeMessageAnnotation({
-        type: "NEW_ACTION",
-        action: nextAction as Action,
-      } satisfies OurMessageAnnotation);
-    }
+    // 2. Search and scrape based on the queries
+    const searchPromises = queryPlan.queries.map(async (query) => {
+      // Fetch search results with scraped content
+      const searchResults = await searchAndScrapeWeb(query);
 
-    // We execute the action and update the state of our system
-    if (nextAction.type === "search") {
-      if (!nextAction.query) {
-        throw new Error("Search action requires a query");
-      }
+      // Get conversation history for summarization context
+      const conversationHistory = ctx.getConversationHistory();
 
-      const searchResults = await searchWeb(nextAction.query);
+      // Summarize each result in parallel
+      const summaryPromises = searchResults.map(async (result) => {
+        try {
+          const summary = await summarizeURL({
+            conversationHistory,
+            scrapedContent: result.scrapedContent,
+            searchMetadata: {
+              date: result.date || "Unknown",
+              title: result.title,
+              url: result.url,
+              snippet: result.snippet,
+            },
+            query: query,
+            langfuseTraceId,
+          });
+          return summary;
+        } catch (error) {
+          console.error("Summarization failed for", result.url, error);
+          return result.scrapedContent; // Fallback to original content
+        }
+      });
 
-      // Convert search results to the format expected by SystemContext
-      const queryResult = {
-        query: nextAction.query,
-        results: searchResults.map((result) => ({
-          date: result.date || "Unknown",
-          title: result.title,
-          url: result.link,
-          snippet: result.snippet,
-        })),
-      };
+      const summaries = await Promise.all(summaryPromises);
 
-      ctx.reportQueries([queryResult]);
-    } else if (nextAction.type === "scrape") {
-      if (!nextAction.urls || nextAction.urls.length === 0) {
-        throw new Error("Scrape action requires URLs");
-      }
-
-      const scrapeResults = await scrapeUrl(nextAction.urls);
-
-      // Convert scrape results to the format expected by SystemContext
-      const scrapeResult = scrapeResults.map((result) => ({
+      // Combine search and summarized results
+      const combinedResults = searchResults.map((result, index) => ({
+        date: result.date || "Unknown",
+        title: result.title,
         url: result.url,
-        result: result.success ? result.data : `Error: ${result.error}`,
+        snippet: result.snippet,
+        scrapedContent: summaries[index] || "No content available",
       }));
 
-      ctx.reportScrapes(scrapeResult);
-    } else if (nextAction.type === "answer") {
+      return {
+        query,
+        results: combinedResults,
+      };
+    });
+
+    // Wait for all searches to complete
+    const searchResults = await Promise.all(searchPromises);
+
+    // 3. Save it to the context
+    searchResults.forEach(({ query, results }) => {
+      ctx.reportSearch({
+        query,
+        results,
+      });
+    });
+
+    // Send annotation about the search step
+    writeMessageAnnotation({
+      type: "NEW_ACTION",
+      action: {
+        type: "continue",
+        title: "Searching for information",
+        reasoning: `Executed ${queryPlan.queries.length} search queries to gather information`,
+      } as Action,
+      queryPlan,
+    } satisfies OurMessageAnnotation);
+
+    // 4. Decide whether to continue by calling getNextAction
+    const nextAction = await getNextAction(ctx, langfuseTraceId);
+
+    // Handle error action
+    if (nextAction.type === "error") {
+      console.error("Agent error:", nextAction.message);
+
+      // Record error to database if we have the required info
+      if (chatId && userId) {
+        try {
+          await recordError({
+            chatId,
+            userId,
+            langfuseTraceId,
+            errorType: "llm_output",
+            errorMessage: nextAction.message,
+            context: {
+              step: ctx.getStep(),
+              hasSearchResults: ctx.hasSearchResults(),
+              ...((nextAction as any).context || {}),
+            },
+          });
+        } catch (recordErr) {
+          console.error("Failed to record agent error:", recordErr);
+        }
+      }
+
+      // Break to allow fallback logic to handle the error gracefully
+      break;
+    }
+
+    // If we should answer, do so immediately
+    if (nextAction.type === "answer") {
       return answerQuestion(ctx, { onFinish, langfuseTraceId });
     }
 

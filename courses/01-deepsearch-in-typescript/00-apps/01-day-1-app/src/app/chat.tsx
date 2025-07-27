@@ -2,7 +2,7 @@
 
 import { ChatMessage } from "~/components/chat-message";
 import { useChat } from "@ai-sdk/react";
-import { Square, Search, Globe, AlertTriangle } from "lucide-react";
+import { Square, AlertTriangle } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { isNewChatCreated } from "~/utils";
@@ -33,7 +33,6 @@ export const ChatPage = ({
   isNewChat,
   initialMessages,
 }: ChatProps) => {
-  const [useSearchGrounding, setUseSearchGrounding] = useState(false);
   const [usageStats, setUsageStats] = useState<UsageStats | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
@@ -48,7 +47,6 @@ export const ChatPage = ({
   } = useChat({
     api: "/api/chat",
     body: {
-      useSearchGrounding,
       chatId,
       isNewChat,
     },
@@ -127,48 +125,6 @@ export const ChatPage = ({
 
   return (
     <div className="flex flex-1 flex-col">
-      {/* Search Mode Toggle */}
-      <div className="border-b border-gray-700 bg-gray-900 p-4">
-        <div className="mx-auto max-w-[65ch]">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <span className="text-sm font-medium text-gray-300">
-                Search Mode:
-              </span>
-            </div>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => setUseSearchGrounding(false)}
-                className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
-                  !useSearchGrounding
-                    ? "bg-blue-600 text-white"
-                    : "bg-gray-700 text-gray-300 hover:bg-gray-600"
-                }`}
-              >
-                <Search className="size-4" />
-                External Tool
-              </button>
-              <button
-                onClick={() => setUseSearchGrounding(true)}
-                className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
-                  useSearchGrounding
-                    ? "bg-purple-600 text-white"
-                    : "bg-gray-700 text-gray-300 hover:bg-gray-600"
-                }`}
-              >
-                <Globe className="size-4" />
-                Search Grounding
-              </button>
-            </div>
-          </div>
-          <p className="mt-2 text-xs text-gray-400">
-            {useSearchGrounding
-              ? "Using native model search grounding (faster, less control)"
-              : "Using external Serper search tool (more control, shows search process)"}
-          </p>
-        </div>
-      </div>
-
       {/* Usage Stats */}
       {usageStats && (
         <div className="border-b border-gray-700 bg-gray-800 p-3">

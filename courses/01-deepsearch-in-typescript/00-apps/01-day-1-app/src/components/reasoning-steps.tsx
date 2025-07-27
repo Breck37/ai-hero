@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { SearchIcon, LinkIcon, ChevronDownIcon } from "lucide-react";
+import { SearchIcon, ChevronDownIcon, BrainIcon } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import type { OurMessageAnnotation } from "../run-agent-loop";
 
@@ -17,6 +17,9 @@ export const ReasoningSteps = ({
       <ul className="space-y-1">
         {annotations.map((annotation, index) => {
           const isOpen = openStep === index;
+          if (!annotation.action.title || !annotation.action.reasoning) {
+            return null;
+          }
           return (
             <li key={index} className="relative">
               <button
@@ -45,31 +48,69 @@ export const ReasoningSteps = ({
               </button>
               <div
                 className={`overflow-hidden transition-all duration-200 ${
-                  isOpen ? "mt-2 max-h-96 opacity-100" : "max-h-0 opacity-0"
+                  isOpen ? "mt-2 opacity-100" : "max-h-0 opacity-0"
                 }`}
               >
                 <div className="rounded-lg border border-purple-500/30 bg-purple-950/20 p-3">
                   <div className="text-sm leading-relaxed text-purple-200/90">
                     <ReactMarkdown>{annotation.action.reasoning}</ReactMarkdown>
                   </div>
-                  {annotation.action.type === "search" && (
-                    <div className="mt-3 flex items-center gap-2 rounded-md bg-purple-950/40 px-2 py-1.5 text-sm text-purple-300/80">
-                      <SearchIcon className="size-4 text-purple-400" />
-                      <span className="font-mono text-xs">
-                        {annotation.action.query}
-                      </span>
-                    </div>
-                  )}
-                  {annotation.action.type === "scrape" && (
-                    <div className="mt-3 flex items-center gap-2 rounded-md bg-purple-950/40 px-2 py-1.5 text-sm text-purple-300/80">
-                      <LinkIcon className="size-4 text-purple-400" />
-                      <span className="font-mono text-xs">
-                        {annotation.action.urls
-                          ?.map((url) => new URL(url).hostname)
-                          ?.join(", ")}
-                      </span>
-                    </div>
-                  )}
+
+                  {/* Show query plan for continue actions */}
+                  {annotation.action.type === "continue" &&
+                    annotation.queryPlan && (
+                      <div className="mt-3 flex flex-col gap-2">
+                        <div className="flex items-center gap-2 rounded-md bg-purple-950/40 px-2 py-1.5 text-sm text-purple-300/80">
+                          <BrainIcon className="size-4 text-purple-400" />
+                          <span className="font-semibold">Research Plan</span>
+                        </div>
+                        <div className="rounded border border-purple-500/20 bg-purple-950/30 p-2">
+                          <ReactMarkdown className="text-xs text-purple-200">
+                            {annotation.queryPlan.plan}
+                          </ReactMarkdown>
+                        </div>
+
+                        <div className="flex items-center gap-2 rounded-md bg-purple-950/40 px-2 py-1.5 text-sm text-purple-300/80">
+                          <SearchIcon className="size-4 text-purple-400" />
+                          <span className="font-semibold">Search Queries</span>
+                        </div>
+                        {annotation.queryPlan.queries.map((query, idx) => (
+                          <div
+                            key={idx}
+                            className="rounded border border-purple-500/20 bg-purple-950/30 p-2"
+                          >
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs font-bold text-purple-400">
+                                {idx + 1}.
+                              </span>
+                              <span className="font-mono text-xs text-purple-200">
+                                {query}
+                              </span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                  {/* Show action type indicator */}
+                  <div className="mt-2 flex items-center gap-2">
+                    <span className="text-xs text-purple-400">Action:</span>
+                    <span
+                      className={`rounded px-2 py-1 text-xs font-semibold ${
+                        annotation.action.type === "continue"
+                          ? "bg-blue-500/20 text-blue-300"
+                          : annotation.action.type === "answer"
+                            ? "bg-green-500/20 text-green-300"
+                            : "bg-red-500/20 text-red-300"
+                      }`}
+                    >
+                      {annotation.action.type === "continue"
+                        ? "Continue Research"
+                        : annotation.action.type === "answer"
+                          ? "Provide Answer"
+                          : "Error"}
+                    </span>
+                  </div>
                 </div>
               </div>
             </li>

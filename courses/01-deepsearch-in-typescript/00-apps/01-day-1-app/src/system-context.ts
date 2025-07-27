@@ -1,25 +1,16 @@
 import type { Message } from "ai";
-import type { LocationHints } from "./types";
+import type { LocationHints, SearchResult } from "./types";
+import {
+  sanitizeForDisplay,
+  extractSafeTextContent,
+  cleanTextContent,
+  prepareLLMContent,
+} from "./utils";
 
-type QueryResultSearchResult = {
-  date: string;
-  title: string;
-  url: string;
-  snippet: string;
-};
-
-type QueryResult = {
+type SearchHistoryEntry = {
   query: string;
-  results: QueryResultSearchResult[];
+  results: SearchResult[];
 };
-
-type ScrapeResult = {
-  url: string;
-  result: string;
-};
-
-const toQueryResult = (query: QueryResultSearchResult) =>
-  [`### ${query.date} - ${query.title}`, query.url, query.snippet].join("\n\n");
 
 export class SystemContext {
   /**
@@ -31,20 +22,7 @@ export class SystemContext {
    * The full message history
    */
   private messages: Message[];
-
-  /**
-   * The history of all queries searched
-   */
-  private queryHistory: QueryResult[] = [];
-
-  /**
-   * The history of all URLs scraped
-   */
-  private scrapeHistory: ScrapeResult[] = [];
-
-  /**
-   * User location information
-   */
+  private searchHistory: SearchHistoryEntry[] = [];
   private locationHints?: LocationHints;
 
   constructor(messages: Message[], locationHints?: LocationHints) {
@@ -70,7 +48,18 @@ export class SystemContext {
       .slice()
       .reverse()
       .find((msg) => msg.role === "user");
-    return lastUserMessage?.content || "";
+
+    if (!lastUserMessage) return "";
+
+    // Extract text content from message safely
+    if (lastUserMessage.content && lastUserMessage.content.trim()) {
+      return cleanTextContent(lastUserMessage.content);
+    } else if (lastUserMessage.parts && Array.isArray(lastUserMessage.parts)) {
+      // Extract text from parts using safe extraction
+      return extractSafeTextContent(lastUserMessage.parts);
+    }
+
+    return "";
   }
 
   getConversationHistory(): string {
@@ -78,49 +67,50 @@ export class SystemContext {
     return this.messages
       .map((msg) => {
         const role = msg.role === "user" ? "User" : "Assistant";
-        return `${role}: ${msg.content}`;
+
+        // Extract text content from message safely
+        let messageText = "";
+        if (msg.content && msg.content.trim()) {
+          messageText = cleanTextContent(msg.content);
+        } else if (msg.parts && Array.isArray(msg.parts)) {
+          // Extract text from parts using safe extraction
+          messageText = extractSafeTextContent(msg.parts);
+        }
+
+        return `${role}: ${messageText}`;
       })
       .join("\n\n");
   }
 
   hasSearchResults() {
-    return this.queryHistory.length > 0;
+    return this.searchHistory.length > 0;
   }
 
-  hasScrapedContent() {
-    return this.scrapeHistory.length > 0;
+  reportSearch(search: SearchHistoryEntry) {
+    this.searchHistory.push(search);
   }
 
-  reportQueries(queries: QueryResult[]) {
-    this.queryHistory.push(...queries);
-  }
-
-  reportScrapes(scrapes: ScrapeResult[]) {
-    this.scrapeHistory.push(...scrapes);
-  }
-
-  getQueryHistory(): string {
-    return this.queryHistory
-      .map((query) =>
+  getSearchHistory(): string {
+    const searchHistoryText = this.searchHistory
+      .map((search) =>
         [
-          `## Query: "${query.query}"`,
-          ...query.results.map(toQueryResult),
+          `## Query: "${sanitizeForDisplay(search.query)}"`,
+          ...search.results.map((result) =>
+            [
+              `### ${sanitizeForDisplay(result.date)} - ${sanitizeForDisplay(result.title)}`,
+              sanitizeForDisplay(result.url),
+              sanitizeForDisplay(result.snippet),
+              `<content_summary>`,
+              sanitizeForDisplay(result.scrapedContent),
+              `</content_summary>`,
+            ].join("\n\n"),
+          ),
         ].join("\n\n"),
       )
       .join("\n\n");
-  }
 
-  getScrapeHistory(): string {
-    return this.scrapeHistory
-      .map((scrape) =>
-        [
-          `## Scrape: "${scrape.url}"`,
-          `<scrape_result>`,
-          scrape.result,
-          `</scrape_result>`,
-        ].join("\n\n"),
-      )
-      .join("\n\n");
+    // Prepare content for LLM with additional safety checks
+    return prepareLLMContent(searchHistoryText);
   }
 
   getLocationHints(): LocationHints | undefined {
@@ -132,11 +122,6 @@ export class SystemContext {
       return "";
     }
 
-    return `USER LOCATION:
-- City: ${this.locationHints.city || "Unknown"}
-- Country: ${this.locationHints.country || "Unknown"}
-- Coordinates: ${this.locationHints.latitude || "Unknown"}, ${this.locationHints.longitude || "Unknown"}
-
-When users ask for location-based information (restaurants, weather, local events, etc.), use their location to provide relevant results.`;
+    return `USER LOCATION:\n- City: ${this.locationHints.city || "Unknown"}\n- Country: ${this.locationHints.country || "Unknown"}\n- Coordinates: ${this.locationHints.latitude || "Unknown"}, ${this.locationHints.longitude || "Unknown"}\n\nWhen users ask for location-based information (restaurants, weather, local events, etc.), use their location to provide relevant results.`;
   }
 }

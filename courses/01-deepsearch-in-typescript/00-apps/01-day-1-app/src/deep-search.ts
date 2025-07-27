@@ -7,6 +7,7 @@ import {
 import { modelWithSearchGrounding } from "@/model";
 import { checkRateLimit, recordRateLimit } from "~/server/rate-limit";
 import { runAgentLoop, type OurMessageAnnotation } from "./run-agent-loop";
+import type { LocationHints } from "./types";
 
 // Helper function to get current date and time
 const getCurrentDateTime = () => {
@@ -51,8 +52,11 @@ export const streamFromDeepSearch = (opts: {
   onFinish: Parameters<typeof streamText>[0]["onFinish"];
   telemetry: TelemetrySettings;
   useSearchGrounding?: boolean;
-  writeMessageAnnotation?: (annotation: OurMessageAnnotation) => void;
-  locationHints?: import("./types").LocationHints;
+  useTavily?: boolean;
+  writeMessageAnnotation: (annotation: OurMessageAnnotation) => void;
+  locationHints?: LocationHints;
+  chatId?: string;
+  userId?: string;
 }): Promise<StreamTextResult<{}, string>> => {
   const currentDateTime = getCurrentDateTime();
   const basePrompt = getBaseSystemPrompt(currentDateTime);
@@ -72,13 +76,16 @@ You have native search grounding capabilities, so you'll automatically search wh
     );
   } else {
     // Use the new agent loop
-    return runAgentLoop(
-      opts.messages,
-      opts.onFinish,
-      opts.writeMessageAnnotation,
-      opts.telemetry.metadata?.langfuseTraceId?.toString(),
-      opts.locationHints,
-    );
+    return runAgentLoop({
+      messages: opts.messages,
+      writeMessageAnnotation: opts.writeMessageAnnotation,
+      onFinish: opts.onFinish,
+      langfuseTraceId: opts.telemetry.metadata?.langfuseTraceId?.toString(),
+      locationHints: opts.locationHints,
+      chatId: opts.chatId,
+      userId: opts.userId,
+      useTavily: opts.useTavily,
+    });
   }
 };
 
@@ -126,6 +133,7 @@ export async function askDeepSearch(messages: Message[]) {
     telemetry: {
       isEnabled: false,
     },
+    writeMessageAnnotation: () => {}, // Provide a dummy function
   });
 
   // Consume the stream - without this,

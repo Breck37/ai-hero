@@ -118,23 +118,27 @@ export const answerQuestion = (
     isFinal?: boolean;
     onFinish?: Parameters<typeof streamText>[0]["onFinish"];
     langfuseTraceId?: string;
+    errorMessage?: string;
   } = {},
 ): StreamTextResult<{}, string> => {
-  const { isFinal = false, onFinish, langfuseTraceId } = options;
+  const { isFinal = false, onFinish, langfuseTraceId, errorMessage } = options;
 
-  const systemPrompt = `You are a knowledgeable friend who provides accurate, well-researched answers based on web search results and scraped content. Your responses should feel like chatting with a smart friend who really knows their stuff!
+  const systemPrompt = `You are a knowledgeable friend who provides accurate, well-researched answers based on web search results and their AI-generated content summaries. Your responses should feel like chatting with a smart friend who really knows their stuff!
 
 ${context.getLocationPrompt()}
 
-🔧 Your task is to answer the user's question using the information gathered from web searches and scraped content.
+🔧 Your task is to answer the user's question using the information gathered from web searches and their AI-generated content summaries from scraped content.
 
 ${isFinal ? "⚠️ IMPORTANT: We may not have all the information needed to answer this question completely, but please provide your best effort based on the available information." : ""}
 
+${errorMessage ? `❌ ERROR ENCOUNTERED: There was an issue with the search process: ${errorMessage}. Please acknowledge this error and provide what assistance you can based on any available information.` : ""}
+
 💡 Core Guidelines:
-• Use the search results and scraped content as your primary sources
+• Use the search results and AI-generated content summaries as your primary sources
 • Provide comprehensive, well-structured answers
 • If information is missing or unclear, acknowledge the limitations
 • Be accurate and factual in your responses
+${errorMessage ? "• Acknowledge the error that occurred and explain any limitations this causes" : ""}
 
 🎯 **LINK FORMATTING - USE INLINE MARKDOWN LINKS:**
 You must format all links as inline markdown links, never bare URLs. Here are examples:
@@ -202,9 +206,7 @@ ${isFinal ? "Note: This is our final attempt to answer the question based on ava
 
 Here is the research context:
 
-${context.getQueryHistory()}
-
-${context.getScrapeHistory()}
+${context.getSearchHistory()}
 
 Please provide a comprehensive answer to the user's question based on the information above. Consider the conversation history to provide contextually relevant responses.
 `,

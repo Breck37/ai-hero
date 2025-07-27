@@ -1,7 +1,7 @@
+import type { Message } from "ai";
 import { and, count, eq, gte, desc, asc } from "drizzle-orm";
 import { db } from "./index";
-import { userRequests, users, chats, messages } from "./schema";
-import type { Message } from "ai";
+import { userRequests, users, chats, messages, errors } from "./schema";
 
 // Rate limit configuration
 export const DAILY_RATE_LIMIT = 50; // requests per day
@@ -122,9 +122,18 @@ export async function upsertChat(opts: {
   userId: string;
   chatId: string;
   title?: string;
+  useSearchGrounding?: boolean;
+  useTavily?: boolean;
   messages: Message[];
 }) {
-  const { userId, chatId, title, messages: messageList } = opts;
+  const {
+    userId,
+    chatId,
+    title,
+    useSearchGrounding,
+    useTavily,
+    messages: messageList,
+  } = opts;
 
   // Check if the chat exists and belongs to the user
   const existingChat = await db
@@ -138,12 +147,26 @@ export async function upsertChat(opts: {
     await db.delete(messages).where(eq(messages.chatId, chatId));
 
     // Update the chat title and timestamp (only if title is provided)
-    const updateData: { updatedAt: Date; title?: string } = {
+    const updateData: {
+      updatedAt: Date;
+      title?: string;
+      useSearchGrounding?: boolean;
+      useTavily?: boolean;
+    } = {
       updatedAt: new Date(),
     };
 
-    if (title) {
-      updateData.title = title;
+    if (title && title.trim()) {
+      // Store titles as-is for clean UI display, but only if not empty/whitespace
+      updateData.title = title.trim();
+    }
+
+    if (useSearchGrounding !== undefined) {
+      updateData.useSearchGrounding = useSearchGrounding;
+    }
+
+    if (useTavily !== undefined) {
+      updateData.useTavily = useTavily;
     }
 
     await db.update(chats).set(updateData).where(eq(chats.id, chatId));
@@ -152,14 +175,18 @@ export async function upsertChat(opts: {
     await db.insert(chats).values({
       id: chatId,
       userId,
+      // Store titles as-is for clean UI display
       title: title || "New Chat",
+      useSearchGrounding: useSearchGrounding ?? false,
+      useTavily: useTavily ?? true, // Default to Tavily
     });
   }
 
-  // Insert all messages
+  // Insert all messages WITHOUT sanitization (preserve original content for UI)
+  // Only insert messages if we have them (not just updating settings)
   if (messageList.length > 0) {
     const messageValues = messageList.map((message, index) => {
-      // Ensure we always have proper parts
+      // Ensure we always have proper parts, but don't sanitize content
       let messageParts;
       if (message.parts && Array.isArray(message.parts)) {
         messageParts = message.parts;
@@ -244,4 +271,50 @@ export async function getChats(userId: string) {
     .orderBy(desc(chats.updatedAt));
 
   return chatList;
+}
+
+/**
+ * Record an error to the database
+ */
+export async function recordError(opts: {
+  chatId?: string;
+  userId?: string;
+  langfuseTraceId?: string;
+  errorType: string;
+  errorMessage: string;
+  errorStack?: string;
+  context?: Record<string, any>;
+}): Promise<void> {
+  await db.insert(errors).values({
+    chatId: opts.chatId,
+    userId: opts.userId,
+    langfuseTraceId: opts.langfuseTraceId,
+    errorType: opts.errorType,
+    errorMessage: opts.errorMessage,
+    errorStack: opts.errorStack,
+    context: opts.context,
+  });
+}
+
+/**
+ * Get errors for a specific chat
+ */
+export async function getChatErrors(chatId: string) {
+  return await db
+    .select()
+    .from(errors)
+    .where(eq(errors.chatId, chatId))
+    .orderBy(desc(errors.createdAt));
+}
+
+/**
+ * Get recent errors for a user
+ */
+export async function getUserErrors(userId: string, limit: number = 10) {
+  return await db
+    .select()
+    .from(errors)
+    .where(eq(errors.userId, userId))
+    .orderBy(desc(errors.createdAt))
+    .limit(limit);
 }

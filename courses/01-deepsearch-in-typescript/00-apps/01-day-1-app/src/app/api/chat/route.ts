@@ -6,6 +6,8 @@ import {
   recordRequest,
   isUserAdmin,
   upsertChat,
+  recordError,
+  getChat,
 } from "~/server/db/queries";
 import { Langfuse } from "langfuse";
 import { env } from "~/env";
@@ -75,6 +77,7 @@ export async function POST(request: Request) {
   const body = (await request.json()) as {
     messages: Array<Message>;
     useSearchGrounding?: boolean;
+    useTavily?: boolean;
     chatId: string;
     isNewChat?: boolean;
   };
@@ -82,6 +85,7 @@ export async function POST(request: Request) {
   const {
     messages,
     useSearchGrounding = false,
+    useTavily = true, // Default to Tavily
     chatId,
     isNewChat = false,
   } = body;
@@ -150,14 +154,31 @@ export async function POST(request: Request) {
     output: { success: true },
   });
 
-  // Set up title generation for new chats
+  // Get chat settings from database for existing chats
+  let chatUseSearchGrounding = useSearchGrounding;
+  let chatUseTavily = useTavily;
+
+  if (!isNewChat) {
+    try {
+      const existingChat = await getChat(chatId, userId);
+      if (existingChat) {
+        chatUseSearchGrounding =
+          existingChat.useSearchGrounding ?? useSearchGrounding;
+        chatUseTavily = existingChat.useTavily ?? useTavily;
+      }
+    } catch (error) {
+      console.error("Failed to get chat settings:", error);
+      // Use the provided defaults if we can't get the chat settings
+    }
+  }
+
+  // Set up title generation for new chats only
   let titlePromise: Promise<string> | undefined;
 
   if (isNewChat) {
     titlePromise = generateChatTitle(messages);
-  } else {
-    titlePromise = Promise.resolve("");
   }
+  // For existing chats, don't generate a title - keep the existing one
 
   // Database call: Create or update the chat immediately with the current messages
   // This ensures we save the user's message even if the stream fails
@@ -175,6 +196,8 @@ export async function POST(request: Request) {
     userId,
     chatId,
     title: "Generating...",
+    useSearchGrounding: chatUseSearchGrounding,
+    useTavily: chatUseTavily,
     messages,
   });
 
@@ -227,74 +250,204 @@ export async function POST(request: Request) {
         keyPrefix: globalRateLimitConfig.keyPrefix,
       });
 
-      const result = await streamFromDeepSearch({
-        messages,
-        useSearchGrounding,
-        telemetry: {
-          isEnabled: true,
-          functionId: useSearchGrounding ? `grounded-agent` : `hero-agent`,
-          metadata: {
-            langfuseTraceId: trace.id,
+      // Save user message immediately to ensure it persists even if the stream fails
+      await upsertChat({
+        userId,
+        chatId,
+        title: "Generating...",
+        useSearchGrounding: chatUseSearchGrounding,
+        useTavily: chatUseTavily,
+        messages: messages, // This includes the user's new message
+      });
+
+      let agentError: string | null = null;
+      let agentResult: any = null;
+      try {
+        agentResult = await streamFromDeepSearch({
+          messages,
+          useSearchGrounding: chatUseSearchGrounding,
+          useTavily: chatUseTavily,
+          telemetry: {
+            isEnabled: true,
+            functionId: chatUseSearchGrounding
+              ? `grounded-agent`
+              : `hero-agent`,
+            metadata: {
+              langfuseTraceId: trace.id,
+            },
           },
-        },
-        writeMessageAnnotation: (annotation) => {
-          // Save the annotation in-memory
-          annotations.push(annotation);
-          // Send it to the client
-          dataStream.writeMessageAnnotation(annotation as any);
-        },
-        onFinish: async ({ response }) => {
-          const responseMessages = response.messages;
+          locationHints: requestHints,
+          writeMessageAnnotation: (annotation) => {
+            // Save the annotation in-memory
+            annotations.push(annotation);
+            // Send it to the client
+            dataStream.writeMessageAnnotation(annotation as any);
+          },
+          chatId,
+          userId,
+          onFinish: async ({ response }) => {
+            try {
+              const responseMessages = response.messages;
 
-          const updatedMessages = appendResponseMessages({
-            messages,
-            responseMessages,
-          });
+              const updatedMessages = appendResponseMessages({
+                messages,
+                responseMessages,
+              });
 
-          // Add annotations to the last message (the AI response)
-          const lastMessage = updatedMessages[updatedMessages.length - 1];
-          if (lastMessage && annotations.length > 0) {
-            lastMessage.annotations = annotations as any;
+              // Add annotations to the last message (the AI response)
+              const lastMessage = updatedMessages[updatedMessages.length - 1];
+              if (lastMessage && annotations.length > 0) {
+                lastMessage.annotations = annotations as any;
+              }
+
+              // Resolve the title promise if it exists
+              let title: string | undefined;
+              if (titlePromise) {
+                try {
+                  title = await titlePromise;
+                  // Ensure the title is valid
+                  if (!title || !title.trim()) {
+                    title = undefined;
+                  }
+                } catch (error) {
+                  console.error("Failed to generate chat title:", error);
+                  title = undefined;
+                }
+              }
+
+              // Database call: Save the updated messages to the database
+              const finalUpsertSpan = trace.span({
+                name: "upsert-chat-final",
+                input: {
+                  userId,
+                  chatId,
+                  title: title || "Chat",
+                  messageCount: updatedMessages.length,
+                },
+              });
+
+              await upsertChat({
+                userId,
+                chatId,
+                ...(title && title.trim() ? { title: title.trim() } : {}), // Only save the title if it's not empty or whitespace
+                useSearchGrounding: chatUseSearchGrounding,
+                useTavily: chatUseTavily,
+                messages: updatedMessages,
+              });
+
+              finalUpsertSpan.end({
+                output: { success: true },
+              });
+
+              // Flush the trace to Langfuse
+              await langfuse.flushAsync();
+            } catch (error) {
+              console.error("Error in onFinish callback:", error);
+
+              // Record error to database with tracing
+              try {
+                await recordError({
+                  chatId,
+                  userId,
+                  langfuseTraceId: trace.id,
+                  errorType: "onfinish_callback",
+                  errorMessage:
+                    error instanceof Error
+                      ? error.message
+                      : "Unknown error in onFinish",
+                  errorStack: error instanceof Error ? error.stack : undefined,
+                  context: {
+                    messageCount: messages.length,
+                    useSearchGrounding,
+                  },
+                });
+              } catch (recordErr) {
+                console.error("Failed to record error:", recordErr);
+              }
+
+              // Try to save at least the messages we have so far
+              try {
+                await upsertChat({
+                  userId,
+                  chatId,
+                  messages: messages, // Fallback to original messages
+                });
+              } catch (fallbackError) {
+                console.error("Fallback save also failed:", fallbackError);
+              }
+            }
+          },
+        });
+
+        // Check for error action type
+        if (
+          agentResult &&
+          typeof agentResult === "object" &&
+          "type" in agentResult &&
+          agentResult.type === "error"
+        ) {
+          agentError =
+            typeof agentResult.message === "string"
+              ? agentResult.message
+              : "Unknown agent error";
+        }
+
+        if (!agentError) {
+          if (useSearchGrounding) {
+            agentResult.mergeIntoDataStream(dataStream, {
+              sendSources: true,
+            });
+          } else {
+            // For external tool mode, the agent loop already writes to the data stream
+            // so we just need to merge the final result
+            agentResult.mergeIntoDataStream(dataStream);
           }
+        }
+      } catch (err) {
+        console.error("Agent loop error:", err);
+        agentError =
+          err &&
+          typeof err === "object" &&
+          err !== null &&
+          "message" in err &&
+          typeof (err as any).message === "string"
+            ? (err as any).message
+            : "Unknown error";
 
-          // Resolve the title promise if it exists
-          const title = titlePromise ? await titlePromise : undefined;
-
-          // Database call: Save the updated messages to the database
-          const finalUpsertSpan = trace.span({
-            name: "upsert-chat-final",
-            input: {
-              userId,
-              chatId,
-              title: title || "Chat",
-              messageCount: updatedMessages.length,
+        // Record error to database with tracing
+        try {
+          await recordError({
+            chatId,
+            userId,
+            langfuseTraceId: trace.id,
+            errorType: "agent_loop",
+            errorMessage: agentError || "Unknown error",
+            errorStack: err instanceof Error ? err.stack : undefined,
+            context: {
+              messageCount: messages.length,
+              useSearchGrounding,
+              annotations: annotations.length,
             },
           });
+        } catch (recordErr) {
+          console.error("Failed to record agent loop error:", recordErr);
+        }
 
+        // Try to save messages even on error
+        try {
           await upsertChat({
             userId,
             chatId,
-            ...(title ? { title } : {}), // Only save the title if it's not empty
-            messages: updatedMessages,
+            messages: messages, // Save at least the user's message
           });
+        } catch (saveError) {
+          console.error("Failed to save messages on error:", saveError);
+        }
+      }
 
-          finalUpsertSpan.end({
-            output: { success: true },
-          });
-
-          // Flush the trace to Langfuse
-          await langfuse.flushAsync();
-        },
-      });
-
-      if (useSearchGrounding) {
-        result.mergeIntoDataStream(dataStream, {
-          sendSources: true,
-        });
-      } else {
-        // For external tool mode, the agent loop already writes to the data stream
-        // so we just need to merge the final result
-        result.mergeIntoDataStream(dataStream);
+      if (agentError) {
+        // Throw error to be caught by the top-level POST handler
+        throw new Error(agentError);
       }
     },
     onError: (e) => {
