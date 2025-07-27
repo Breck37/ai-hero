@@ -1,15 +1,97 @@
-export function isNewChatCreated(data: unknown): data is {
-  type: "NEW_CHAT_CREATED";
-  chatId: string;
-} {
-  return (
-    typeof data === "object" &&
-    data !== null &&
-    "type" in data &&
-    data.type === "NEW_CHAT_CREATED" &&
-    "chatId" in data &&
-    typeof data.chatId === "string"
-  );
+/**
+ * Debounce function to limit how often a function can be called
+ */
+export function debounce<T extends (...args: any[]) => any>(
+  func: T,
+  wait: number,
+): (...args: Parameters<T>) => void {
+  let timeout: NodeJS.Timeout | null = null;
+
+  return (...args: Parameters<T>) => {
+    if (timeout) {
+      clearTimeout(timeout);
+    }
+    timeout = setTimeout(() => func(...args), wait);
+  };
+}
+
+/**
+ * Throttle function to limit how often a function can be called
+ */
+export function throttle<T extends (...args: any[]) => any>(
+  func: T,
+  limit: number,
+): (...args: Parameters<T>) => void {
+  let inThrottle: boolean = false;
+
+  return (...args: Parameters<T>) => {
+    if (!inThrottle) {
+      func(...args);
+      inThrottle = true;
+      setTimeout(() => (inThrottle = false), limit);
+    }
+  };
+}
+
+/**
+ * Check if a chat is newly created based on data stream
+ */
+export function isNewChatCreated(
+  dataItem: any,
+): dataItem is { chatId: string } {
+  return dataItem && typeof dataItem === "object" && "chatId" in dataItem;
+}
+
+/**
+ * Performance optimization: Memoize expensive computations
+ */
+export function memoize<T extends (...args: any[]) => any>(
+  func: T,
+  getKey?: (...args: Parameters<T>) => string,
+): T {
+  const cache = new Map<string, ReturnType<T>>();
+
+  return ((...args: Parameters<T>) => {
+    const key = getKey ? getKey(...args) : JSON.stringify(args);
+
+    if (cache.has(key)) {
+      return cache.get(key);
+    }
+
+    const result = func(...args);
+    cache.set(key, result);
+    return result;
+  }) as T;
+}
+
+/**
+ * Batch DOM updates for better performance
+ */
+export function batchDOMUpdates(updates: (() => void)[]): void {
+  if (
+    typeof window !== "undefined" &&
+    typeof window.requestAnimationFrame === "function"
+  ) {
+    window.requestAnimationFrame(() => {
+      updates.forEach((update) => update());
+    });
+  } else {
+    updates.forEach((update) => update());
+  }
+}
+
+/**
+ * Optimize scroll performance by using passive listeners
+ */
+export function addPassiveScrollListener(
+  element: HTMLElement,
+  handler: (event: Event) => void,
+): () => void {
+  element.addEventListener("scroll", handler, { passive: true });
+
+  return () => {
+    element.removeEventListener("scroll", handler);
+  };
 }
 
 /**
@@ -324,4 +406,15 @@ export const getFaviconUrl = (url: string): string => {
     // Fallback for invalid URLs
     return "";
   }
+};
+
+// Global state to track Tavily usage limits
+let tavilyLimitExceeded = false;
+
+export const setTavilyLimitExceeded = (exceeded: boolean) => {
+  tavilyLimitExceeded = exceeded;
+};
+
+export const isTavilyLimitExceeded = () => {
+  return tavilyLimitExceeded;
 };

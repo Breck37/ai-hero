@@ -2,6 +2,7 @@ import { type StreamTextResult, type Message, streamText } from "ai";
 import { model, modelWithSearchGrounding } from "../model";
 import { runAgentLoop } from "./run-agent-loop";
 import { checkRateLimit, recordRateLimit } from "./server/rate-limit";
+import { isTavilyLimitExceeded } from "./utils";
 import type { OurMessageAnnotation, LocationHints } from "./types";
 
 export type TelemetrySettings = {
@@ -79,6 +80,9 @@ You have native search grounding capabilities, so you'll automatically search wh
     );
   } else {
     // Use the new agent loop
+    // Automatically disable Tavily if usage limit is exceeded
+    const shouldUseTavily = opts.useTavily && !isTavilyLimitExceeded();
+
     return runAgentLoop({
       messages: opts.messages,
       writeMessageAnnotation: opts.writeMessageAnnotation,
@@ -87,7 +91,7 @@ You have native search grounding capabilities, so you'll automatically search wh
       locationHints: opts.locationHints,
       chatId: opts.chatId,
       userId: opts.userId,
-      useTavily: opts.useTavily,
+      useTavily: shouldUseTavily,
     });
   }
 };

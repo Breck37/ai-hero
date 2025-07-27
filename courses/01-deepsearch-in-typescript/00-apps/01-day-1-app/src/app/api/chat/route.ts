@@ -445,6 +445,12 @@ export async function POST(request: Request) {
       }
 
       if (agentError) {
+        // Check if it's a Tavily usage limit error and provide a user-friendly message
+        if (agentError.includes("TAVILY_USAGE_LIMIT_EXCEEDED")) {
+          throw new Error(
+            "We've temporarily hit our search service limits. I've automatically switched to manual search mode and should work normally now. Please try your question again!",
+          );
+        }
         // Throw error to be caught by the top-level POST handler
         throw new Error(agentError);
       }

@@ -3,6 +3,7 @@ import type { Message } from "ai";
 import { ReasoningSteps } from "./reasoning-steps";
 import { SearchSources } from "./search-sources";
 import type { OurMessageAnnotation } from "../types";
+import { memo } from "react";
 
 export type MessagePart = NonNullable<Message["parts"]>[number];
 
@@ -54,10 +55,6 @@ const components: Components = {
       {children}
     </a>
   ),
-};
-
-const Markdown = ({ children }: { children: string }) => {
-  return <ReactMarkdown components={components}>{children}</ReactMarkdown>;
 };
 
 // SourcePart: rendering for source message parts from search grounding
@@ -218,81 +215,93 @@ function ToolInvocationPart({
   );
 }
 
-export const ChatMessage = ({
-  parts,
-  role,
-  userName,
-  annotations,
-}: ChatMessageProps) => {
-  const isAI = role === "assistant";
+export const ChatMessage = memo(
+  ({ parts, role, userName, annotations }: ChatMessageProps) => {
+    const isAI = role === "assistant";
+    const hasContent = Array.isArray(parts) && parts.length > 0;
+    const hasTextContent =
+      hasContent &&
+      parts.some((part) => part.type === "text" && part.text?.trim());
+    const hasAnnotations = annotations && annotations.length > 0;
 
-  return (
-    <div className="mb-6">
-      <div
-        className={`rounded-lg p-4 ${
-          isAI ? "bg-gray-800 text-gray-300" : "bg-gray-900 text-gray-300"
-        }`}
-      >
-        <p className="mb-2 text-sm font-semibold text-gray-400">
-          {isAI ? "AI" : userName}
-        </p>
+    return (
+      <div className="mb-6">
+        <div
+          className={`rounded-lg p-4 ${
+            isAI ? "bg-gray-800 text-gray-300" : "bg-gray-900 text-gray-300"
+          }`}
+        >
+          <p className="mb-2 text-sm font-semibold text-gray-400">
+            {isAI ? "AI" : userName}
+          </p>
 
-        {/* Show search sources and reasoning steps for AI messages */}
-        {isAI && (
-          <>
-            <SearchSources annotations={annotations} />
-            <ReasoningSteps annotations={annotations} />
-          </>
-        )}
+          {/* Show search sources and reasoning steps for AI messages */}
+          {isAI && hasAnnotations && (
+            <>
+              <SearchSources annotations={annotations} />
+              <ReasoningSteps annotations={annotations} />
+            </>
+          )}
 
-        <div className="prose prose-invert max-w-none">
-          {Array.isArray(parts) ? (
-            parts.map((part, idx) => {
-              // Hover over MessagePart to see all possible types!
-              //
-              // MessagePart can be:
-              // - TextUIPart: { type: "text"; text: string; }
-              // - ReasoningUIPart: { type: "reasoning"; reasoning: string; details: Array<...>; }
-              // - ToolInvocationUIPart: { type: "tool-invocation"; toolInvocation: ToolInvocation; }
-              // - SourceUIPart: { type: "source"; source: LanguageModelV1Source; }
-              // - FileUIPart: { type: "file"; mimeType: string; data: string; }
-              // - StepStartUIPart: { type: "step-start"; }
+          {/* Show actual content when available */}
+          {hasTextContent && (
+            <div className="prose prose-invert max-w-none">
+              {parts.map((part, idx) => {
+                // Hover over MessagePart to see all possible types!
+                //
+                // MessagePart can be:
+                // - TextUIPart: { type: "text"; text: string; }
+                // - ReasoningUIPart: { type: "reasoning"; reasoning: string; details: Array<...>; }
+                // - ToolInvocationUIPart: { type: "tool-invocation"; toolInvocation: ToolInvocation; }
+                // - SourceUIPart: { type: "source"; source: LanguageModelV1Source; }
+                // - FileUIPart: { type: "file"; mimeType: string; data: string; }
+                // - StepStartUIPart: { type: "step-start"; }
 
-              if (part.type === "text") {
-                return <Markdown key={idx}>{part.text}</Markdown>;
-              }
+                if (part.type === "text") {
+                  return (
+                    <ReactMarkdown key={idx} components={components}>
+                      {part.text}
+                    </ReactMarkdown>
+                  );
+                }
 
-              if (part.type === "tool-invocation") {
-                return (
-                  <ToolInvocationPart
-                    key={idx}
-                    toolInvocation={part.toolInvocation}
-                  />
-                );
-              }
+                if (part.type === "tool-invocation") {
+                  return (
+                    <ToolInvocationPart
+                      key={idx}
+                      toolInvocation={part.toolInvocation}
+                    />
+                  );
+                }
 
-              if (part.type === "source") {
-                return <SourcePart key={idx} source={part.source} />;
-              }
+                if (part.type === "source") {
+                  return <SourcePart key={idx} source={part.source} />;
+                }
 
-              // You can add more handlers for other part types here:
-              // if (part.type === "reasoning") {
-              //   return <ReasoningPart key={idx} reasoning={part.reasoning} details={part.details} />;
-              // }
-              // if (part.type === "file") {
-              //   return <FilePart key={idx} mimeType={part.mimeType} data={part.data} />;
-              // }
-              // if (part.type === "step-start") {
-              //   return <StepStartPart key={idx} />;
-              // }
+                // You can add more handlers for other part types here:
+                // if (part.type === "reasoning") {
+                //   return <ReasoningPart key={idx} reasoning={part.reasoning} details={part.details} />;
+                // }
+                // if (part.type === "file") {
+                //   return <FilePart key={idx} mimeType={part.mimeType} data={part.data} />;
+                // }
+                // if (part.type === "step-start") {
+                //   return <StepStartPart key={idx} />;
+                // }
 
-              return null;
-            })
-          ) : (
+                return null;
+              })}
+            </div>
+          )}
+
+          {/* Fallback for non-AI messages or messages with no content */}
+          {!isAI && !hasContent && (
             <p className="text-gray-400">Message content unavailable</p>
           )}
         </div>
       </div>
-    </div>
-  );
-};
+    );
+  },
+);
+
+ChatMessage.displayName = "ChatMessage";

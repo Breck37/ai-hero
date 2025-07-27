@@ -10,6 +10,7 @@ import { summarizeURL } from "./summarize-url";
 import { env } from "./env";
 import { getFaviconUrl } from "./utils";
 import { recordError } from "./server/db/queries";
+import { shouldSkipWebSearch } from "./simple-query-check";
 import type { LocationHints, OurMessageAnnotation } from "./types";
 
 export interface RunAgentLoopArgs {
@@ -39,13 +40,90 @@ export const runAgentLoop = async ({
   // Combined search and scrape function using either Tavily or manual method
   const searchAndScrapeWeb = async (query: string) => {
     if (useTavily) {
-      // Use Tavily for combined search and scrape
-      const results = await searchAndScrapeWithTavily(
-        query,
-        env.SEARCH_RESULTS_COUNT,
-        undefined,
-      );
-      return results.results;
+      try {
+        // Use Tavily for combined search and scrape
+        const results = await searchAndScrapeWithTavily(
+          query,
+          env.SEARCH_RESULTS_COUNT,
+          undefined,
+        );
+        return results.results;
+      } catch (error) {
+        // Check if it's a Tavily usage limit error
+        if (
+          error instanceof Error &&
+          error.message === "TAVILY_USAGE_LIMIT_EXCEEDED"
+        ) {
+          console.warn(
+            "Tavily usage limit exceeded, falling back to manual search",
+          );
+
+          // Send annotation about the fallback
+          writeMessageAnnotation({
+            type: "NEW_ACTION",
+            action: {
+              type: "continue",
+              title: "Tavily usage limit reached - using manual search",
+              reasoning:
+                "Tavily API usage limit has been exceeded. Automatically falling back to manual search and scrape method.",
+              feedback: "Switched to manual search due to API limits",
+            },
+            queryPlan: {
+              plan: "Fallback to manual search due to Tavily usage limits",
+              queries: [query],
+            },
+          } satisfies OurMessageAnnotation);
+
+          // Fall back to manual search
+          const searchResults = await searchSerper(
+            { q: query, num: env.SEARCH_RESULTS_COUNT },
+            undefined, // abortSignal
+          );
+
+          const mappedResults: Array<{
+            title: string;
+            link: string;
+            snippet: string;
+            date?: string;
+          }> = searchResults.organic.map((result) => ({
+            title: result.title,
+            link: result.link,
+            snippet: result.snippet,
+            date: result.date,
+          }));
+
+          // Scrape each URL
+          const urls = mappedResults.map((result) => result.link);
+          const scrapeResults = await bulkCrawlWebsites({ urls });
+
+          if (!scrapeResults.success) {
+            // Return an array with error information
+            return scrapeResults.results.map((r) => ({
+              title:
+                mappedResults.find((m) => m.link === r.url)?.title || "Unknown",
+              url: r.url,
+              snippet:
+                mappedResults.find((m) => m.link === r.url)?.snippet || "",
+              scrapedContent: r.result.success
+                ? r.result.data
+                : `Error: ${r.result.error}`,
+              date: mappedResults.find((m) => m.link === r.url)?.date,
+            }));
+          }
+
+          // Return an array of successful results
+          return mappedResults.map((result, index) => ({
+            title: result.title,
+            url: result.link,
+            snippet: result.snippet,
+            scrapedContent: scrapeResults.results[index]?.result.success
+              ? scrapeResults.results[index]!.result.data
+              : "No content available",
+            date: scrapeResults.results[index]?.result.date || result.date,
+          }));
+        }
+        throw error; // Re-throw other errors
+      }
     } else {
       // Use manual search and scrape (separate steps)
       const searchResults = await searchSerper(
@@ -102,7 +180,32 @@ export const runAgentLoop = async ({
     // 1. Run the query rewriter
     const queryPlan = await queryRewriter(ctx, langfuseTraceId);
 
-    // 2. Search and scrape based on the queries
+    // 2. Check if the query is simple enough to skip web search
+    const userQuestion = ctx.getUserQuestion();
+    const locationContext = ctx.getLocationPrompt();
+    const simplicityCheck = await shouldSkipWebSearch(
+      userQuestion,
+      locationContext,
+    );
+
+    if (simplicityCheck.skip) {
+      // Send annotation about skipping search
+      writeMessageAnnotation({
+        type: "NEW_ACTION",
+        action: {
+          type: "answer",
+          title: "Direct response to simple query",
+          reasoning: `Query identified as simple: ${simplicityCheck.reason}. Skipping web search and providing direct response.`,
+          feedback: "Query identified as simple - no web search needed",
+        },
+        queryPlan,
+      } satisfies OurMessageAnnotation);
+
+      // Go directly to answering without search
+      return answerQuestion(ctx, { onFinish, langfuseTraceId });
+    }
+
+    // 3. Search and scrape based on the queries
     const searchPromises = queryPlan.queries.map(async (query) => {
       // Fetch search results with scraped content
       const searchResults = await searchAndScrapeWeb(query);
@@ -193,18 +296,9 @@ export const runAgentLoop = async ({
     // 4. Decide whether to continue by calling getNextAction
     const nextAction = await getNextAction(ctx, langfuseTraceId);
 
-    // Debug logging for feedback
-    console.log("getNextAction result:", {
-      type: nextAction.type,
-      title: nextAction.title,
-      hasFeedback: "feedback" in nextAction,
-      feedback: nextAction.feedback,
-    });
-
     // Store the feedback in the system context for the next iteration
     if ("feedback" in nextAction && nextAction.feedback) {
       ctx.setLastFeedback(nextAction.feedback);
-      console.log("Stored feedback in context:", nextAction.feedback);
     }
 
     // Send annotation about the search and evaluation step
@@ -218,8 +312,6 @@ export const runAgentLoop = async ({
       },
       queryPlan,
     } satisfies OurMessageAnnotation);
-
-    console.log("Sent annotation with feedback:", nextAction.feedback);
 
     // Handle error action
     if (nextAction.type === "error") {
