@@ -10,11 +10,7 @@ import { summarizeURL } from "./summarize-url";
 import { env } from "./env";
 import { getFaviconUrl } from "./utils";
 import { recordError } from "./server/db/queries";
-import type {
-  LocationHints,
-  OurMessageAnnotation,
-  SearchSource,
-} from "./types";
+import type { LocationHints, OurMessageAnnotation } from "./types";
 
 export interface RunAgentLoopArgs {
   messages: Message[];
@@ -110,67 +106,84 @@ export const runAgentLoop = async ({
     const searchPromises = queryPlan.queries.map(async (query) => {
       // Fetch search results with scraped content
       const searchResults = await searchAndScrapeWeb(query);
-
-      // Send source annotation immediately after search completion
-      writeMessageAnnotation({
-        type: "SEARCH_SOURCES",
-        query,
-        sources: searchResults.map((result) => ({
-          title: result.title,
-          url: result.url,
-          snippet: result.snippet,
-          favicon: getFaviconUrl(result.url),
-          date: result.date,
-        })),
-      } satisfies OurMessageAnnotation);
-
-      // Get conversation history for summarization context
-      const conversationHistory = ctx.getConversationHistory();
-
-      // Summarize each result in parallel
-      const summaryPromises = searchResults.map(async (result) => {
-        try {
-          const summary = await summarizeURL({
-            conversationHistory,
-            scrapedContent: result.scrapedContent,
-            searchMetadata: {
-              date: result.date || "Unknown",
-              title: result.title,
-              url: result.url,
-              snippet: result.snippet,
-            },
-            query: query,
-            langfuseTraceId,
-          });
-          return summary;
-        } catch (error) {
-          console.error("Summarization failed for", result.url, error);
-          return result.scrapedContent; // Fallback to original content
-        }
-      });
-
-      const summaries = await Promise.all(summaryPromises);
-
-      // Combine search and summarized results
-      const combinedResults = searchResults.map((result, index) => ({
-        date: result.date || "Unknown",
-        title: result.title,
-        url: result.url,
-        snippet: result.snippet,
-        scrapedContent: summaries[index] || "No content available",
-      }));
-
-      return {
-        query,
-        results: combinedResults,
-      };
+      return { query, searchResults };
     });
 
     // Wait for all searches to complete
-    const searchResults = await Promise.all(searchPromises);
+    const allSearchResults = await Promise.all(searchPromises);
 
-    // 3. Save it to the context
-    searchResults.forEach(({ query, results }) => {
+    // 3. Deduplicate results and send sources annotation
+    const allResults = allSearchResults.flatMap(
+      ({ searchResults }) => searchResults,
+    );
+
+    // Deduplicate by URL
+    const uniqueResults = allResults.filter(
+      (result, index, self) =>
+        index === self.findIndex((r) => r.url === result.url),
+    );
+
+    // Send one SEARCH_SOURCES annotation for all unique sources
+    writeMessageAnnotation({
+      type: "SEARCH_SOURCES",
+      query: `Search step ${ctx.getStep() + 1}`,
+      sources: uniqueResults.map((result) => ({
+        title: result.title,
+        url: result.url,
+        snippet: result.snippet,
+        favicon: getFaviconUrl(result.url),
+        date: result.date,
+      })),
+    } satisfies OurMessageAnnotation);
+
+    // 4. Process results for summarization and context
+    const processedResults = await Promise.all(
+      allSearchResults.map(async ({ query, searchResults }) => {
+        // Get conversation history for summarization context
+        const conversationHistory = ctx.getConversationHistory();
+
+        // Summarize each result in parallel
+        const summaryPromises = searchResults.map(async (result) => {
+          try {
+            const summary = await summarizeURL({
+              conversationHistory,
+              scrapedContent: result.scrapedContent,
+              searchMetadata: {
+                date: result.date || "Unknown",
+                title: result.title,
+                url: result.url,
+                snippet: result.snippet,
+              },
+              query: query,
+              langfuseTraceId,
+            });
+            return summary;
+          } catch (error) {
+            console.error("Summarization failed for", result.url, error);
+            return result.scrapedContent; // Fallback to original content
+          }
+        });
+
+        const summaries = await Promise.all(summaryPromises);
+
+        // Combine search and summarized results
+        const combinedResults = searchResults.map((result, index) => ({
+          date: result.date || "Unknown",
+          title: result.title,
+          url: result.url,
+          snippet: result.snippet,
+          scrapedContent: summaries[index] || "No content available",
+        }));
+
+        return {
+          query,
+          results: combinedResults,
+        };
+      }),
+    );
+
+    // 5. Save processed results to the context
+    processedResults.forEach(({ query, results }) => {
       ctx.reportSearch({
         query,
         results,
