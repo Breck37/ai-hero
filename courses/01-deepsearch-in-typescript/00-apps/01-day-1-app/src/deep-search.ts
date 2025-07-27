@@ -1,13 +1,16 @@
-import {
-  streamText,
-  type Message,
-  type TelemetrySettings,
-  type StreamTextResult,
-} from "ai";
-import { modelWithSearchGrounding } from "@/model";
-import { checkRateLimit, recordRateLimit } from "~/server/rate-limit";
-import { runAgentLoop, type OurMessageAnnotation } from "./run-agent-loop";
-import type { LocationHints } from "./types";
+import { type StreamTextResult, type Message, streamText } from "ai";
+import { model, modelWithSearchGrounding } from "../model";
+import { runAgentLoop } from "./run-agent-loop";
+import { checkRateLimit, recordRateLimit } from "./server/rate-limit";
+import type { OurMessageAnnotation, LocationHints } from "./types";
+
+export type TelemetrySettings = {
+  isEnabled: boolean;
+  functionId?: string;
+  metadata?: {
+    langfuseTraceId?: string;
+  };
+};
 
 // Helper function to get current date and time
 const getCurrentDateTime = () => {

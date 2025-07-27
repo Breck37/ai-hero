@@ -8,7 +8,7 @@ import { useRouter } from "next/navigation";
 import { isNewChatCreated } from "~/utils";
 import { StickToBottom } from "use-stick-to-bottom";
 import type { Message } from "ai";
-import type { OurMessageAnnotation } from "~/run-agent-loop";
+import type { OurMessageAnnotation } from "~/types";
 
 interface ChatProps {
   userName: string;

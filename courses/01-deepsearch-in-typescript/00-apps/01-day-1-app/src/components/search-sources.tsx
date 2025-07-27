@@ -1,14 +1,6 @@
 import { useState } from "react";
 import { ChevronDownIcon, SearchIcon, GlobeIcon } from "lucide-react";
-import type { OurMessageAnnotation } from "../run-agent-loop";
-
-type SearchSource = {
-  title: string;
-  url: string;
-  snippet: string;
-  favicon?: string;
-  date?: string;
-};
+import type { OurMessageAnnotation, SearchSource } from "../types";
 
 type SearchSourcesAnnotation = Extract<
   OurMessageAnnotation,

@@ -6,7 +6,7 @@ import {
   MessageSquareIcon,
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
-import type { OurMessageAnnotation } from "../run-agent-loop";
+import type { OurMessageAnnotation } from "../types";
 
 type NewActionAnnotation = Extract<
   OurMessageAnnotation,

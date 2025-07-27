@@ -1,36 +1,20 @@
 import { type StreamTextResult, type Message, streamText } from "ai";
 import { SystemContext } from "./system-context";
-import { getNextAction, type Action } from "./get-next-action";
-import { queryRewriter, type QueryRewriterResult } from "./query-rewriter";
+import { getNextAction } from "./get-next-action";
+import { queryRewriter } from "./query-rewriter";
 import { answerQuestion } from "./answer-question";
 import { searchAndScrapeWithTavily } from "./tavily";
 import { searchSerper } from "./manual-search";
 import { bulkCrawlWebsites } from "./manual-scraper";
 import { summarizeURL } from "./summarize-url";
 import { env } from "./env";
-import type { LocationHints } from "./types";
-import { recordError } from "./server/db/queries";
 import { getFaviconUrl } from "./utils";
-
-type SearchSource = {
-  title: string;
-  url: string;
-  snippet: string;
-  favicon?: string;
-  date?: string;
-};
-
-export type OurMessageAnnotation =
-  | {
-      type: "NEW_ACTION";
-      action: Action;
-      queryPlan?: QueryRewriterResult;
-    }
-  | {
-      type: "SEARCH_SOURCES";
-      query: string;
-      sources: SearchSource[];
-    };
+import { recordError } from "./server/db/queries";
+import type {
+  LocationHints,
+  OurMessageAnnotation,
+  SearchSource,
+} from "./types";
 
 export interface RunAgentLoopArgs {
   messages: Message[];
@@ -218,7 +202,7 @@ export const runAgentLoop = async ({
         title: nextAction.title,
         reasoning: nextAction.reasoning,
         feedback: nextAction.feedback,
-      } as Action,
+      },
       queryPlan,
     } satisfies OurMessageAnnotation);
 

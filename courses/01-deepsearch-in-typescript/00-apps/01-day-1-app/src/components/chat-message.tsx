@@ -2,7 +2,7 @@ import ReactMarkdown, { type Components } from "react-markdown";
 import type { Message } from "ai";
 import { ReasoningSteps } from "./reasoning-steps";
 import { SearchSources } from "./search-sources";
-import type { OurMessageAnnotation } from "../run-agent-loop";
+import type { OurMessageAnnotation } from "../types";
 
 export type MessagePart = NonNullable<Message["parts"]>[number];
 

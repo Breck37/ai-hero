@@ -13,7 +13,7 @@ import { Langfuse } from "langfuse";
 import { env } from "~/env";
 import { streamFromDeepSearch } from "~/deep-search";
 import { checkRateLimit, recordRateLimit } from "~/server/rate-limit";
-import type { OurMessageAnnotation } from "~/run-agent-loop";
+import type { OurMessageAnnotation } from "~/types";
 import { generateChatTitle } from "~/generate-chat-title";
 import { geolocation } from "@vercel/functions";
 

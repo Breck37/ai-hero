@@ -3,6 +3,9 @@ import { generateObject } from "ai";
 import { model } from "../model";
 import type { SystemContext } from "./system-context";
 import { safeJsonParse } from "./utils";
+import type { QueryRewriterResult } from "./types";
+
+export { type QueryRewriterResult };
 
 const queryRewriterSchema = z.object({
   plan: z
@@ -18,11 +21,6 @@ const queryRewriterSchema = z.object({
     .min(1)
     .max(5),
 });
-
-export type QueryRewriterResult = {
-  plan: string;
-  queries: string[];
-};
 
 export const queryRewriter = async (
   context: SystemContext,

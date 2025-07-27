@@ -3,32 +3,9 @@ import { generateObject } from "ai";
 import { model } from "../model";
 import type { SystemContext } from "./system-context";
 import { safeJsonParse } from "./utils";
+import type { Action, ErrorAction } from "./types";
 
-type ContinueAction = {
-  type: "continue";
-  title: string;
-  reasoning: string;
-  feedback: string;
-};
-
-type AnswerAction = {
-  type: "answer";
-  title: string;
-  reasoning: string;
-  feedback: string;
-};
-
-type ErrorAction = {
-  type: "error";
-  message: string;
-  title?: string;
-  reasoning?: string;
-  feedback?: string;
-};
-
-type Action = ContinueAction | AnswerAction | ErrorAction;
-
-export type { Action, ErrorAction };
+export { type Action, type ErrorAction };
 export const actionSchema = z.object({
   type: z.enum(["continue", "answer"]).describe(
     `The type of action to take.
