@@ -254,7 +254,6 @@ export async function POST(request: Request) {
       await upsertChat({
         userId,
         chatId,
-        title: "Generating...",
         useSearchGrounding: chatUseSearchGrounding,
         useTavily: chatUseTavily,
         messages: messages, // This includes the user's new message

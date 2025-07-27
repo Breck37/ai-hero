@@ -137,7 +137,7 @@ export async function upsertChat(opts: {
 
   // Check if the chat exists and belongs to the user
   const existingChat = await db
-    .select({ id: chats.id })
+    .select({ id: chats.id, title: chats.title })
     .from(chats)
     .where(and(eq(chats.id, chatId), eq(chats.userId, userId)))
     .limit(1);
@@ -146,7 +146,7 @@ export async function upsertChat(opts: {
     // Chat exists - delete all existing messages and replace them
     await db.delete(messages).where(eq(messages.chatId, chatId));
 
-    // Update the chat title and timestamp (only if title is provided)
+    // Update the chat title and timestamp (only if title is provided AND current title is "Generating..." or empty)
     const updateData: {
       updatedAt: Date;
       title?: string;
@@ -156,8 +156,17 @@ export async function upsertChat(opts: {
       updatedAt: new Date(),
     };
 
-    if (title && title.trim()) {
-      // Store titles as-is for clean UI display, but only if not empty/whitespace
+    const currentTitle = existingChat[0]?.title;
+    const shouldUpdateTitle =
+      title &&
+      title.trim() &&
+      (currentTitle === "Generating..." ||
+        currentTitle === "New Chat" ||
+        !currentTitle ||
+        currentTitle.trim() === "");
+
+    if (shouldUpdateTitle) {
+      // Only update title if current title is "Generating..." or if no proper title exists
       updateData.title = title.trim();
     }
 
