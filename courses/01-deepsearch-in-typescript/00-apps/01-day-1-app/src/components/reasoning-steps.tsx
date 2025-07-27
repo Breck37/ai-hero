@@ -8,6 +8,11 @@ import {
 import ReactMarkdown from "react-markdown";
 import type { OurMessageAnnotation } from "../run-agent-loop";
 
+type NewActionAnnotation = Extract<
+  OurMessageAnnotation,
+  { type: "NEW_ACTION" }
+>;
+
 export const ReasoningSteps = ({
   annotations,
 }: {
@@ -15,12 +20,18 @@ export const ReasoningSteps = ({
 }) => {
   const [openStep, setOpenStep] = useState<number | null>(null);
 
-  if (annotations.length === 0) return null;
+  // Filter for NEW_ACTION annotations only
+  const actionAnnotations = annotations.filter(
+    (annotation): annotation is NewActionAnnotation =>
+      annotation.type === "NEW_ACTION",
+  );
+
+  if (actionAnnotations.length === 0) return null;
 
   return (
     <div className="mb-4 w-full">
       <ul className="space-y-1">
-        {annotations.map((annotation, index) => {
+        {actionAnnotations.map((annotation, index) => {
           const isOpen = openStep === index;
           if (!annotation.action.title || !annotation.action.reasoning) {
             return null;
@@ -96,21 +107,23 @@ export const ReasoningSteps = ({
                           <SearchIcon className="size-4 text-purple-400" />
                           <span className="font-semibold">Search Queries</span>
                         </div>
-                        {annotation.queryPlan.queries.map((query, idx) => (
-                          <div
-                            key={idx}
-                            className="rounded border border-purple-500/20 bg-purple-950/30 p-2"
-                          >
-                            <div className="flex items-center gap-2">
-                              <span className="text-xs font-bold text-purple-400">
-                                {idx + 1}.
-                              </span>
-                              <span className="font-mono text-xs text-purple-200">
-                                {query}
-                              </span>
+                        {annotation.queryPlan.queries.map(
+                          (query: string, idx: number) => (
+                            <div
+                              key={idx}
+                              className="rounded border border-purple-500/20 bg-purple-950/30 p-2"
+                            >
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs font-bold text-purple-400">
+                                  {idx + 1}.
+                                </span>
+                                <span className="font-mono text-xs text-purple-200">
+                                  {query}
+                                </span>
+                              </div>
                             </div>
-                          </div>
-                        ))}
+                          ),
+                        )}
                       </div>
                     )}
 

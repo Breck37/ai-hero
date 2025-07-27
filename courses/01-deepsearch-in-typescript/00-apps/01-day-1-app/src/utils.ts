@@ -312,3 +312,16 @@ export function safeJsonParse<T = any>(
     }
   }
 }
+
+/**
+ * Extract favicon URL from a website URL
+ */
+export const getFaviconUrl = (url: string): string => {
+  try {
+    const urlObj = new URL(url);
+    return `${urlObj.protocol}//${urlObj.hostname}/favicon.ico`;
+  } catch {
+    // Fallback for invalid URLs
+    return "";
+  }
+};

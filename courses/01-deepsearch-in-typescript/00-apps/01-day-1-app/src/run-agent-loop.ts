@@ -10,12 +10,27 @@ import { summarizeURL } from "./summarize-url";
 import { env } from "./env";
 import type { LocationHints } from "./types";
 import { recordError } from "./server/db/queries";
+import { getFaviconUrl } from "./utils";
 
-export type OurMessageAnnotation = {
-  type: "NEW_ACTION";
-  action: Action;
-  queryPlan?: QueryRewriterResult;
+type SearchSource = {
+  title: string;
+  url: string;
+  snippet: string;
+  favicon?: string;
+  date?: string;
 };
+
+export type OurMessageAnnotation =
+  | {
+      type: "NEW_ACTION";
+      action: Action;
+      queryPlan?: QueryRewriterResult;
+    }
+  | {
+      type: "SEARCH_SOURCES";
+      query: string;
+      sources: SearchSource[];
+    };
 
 export interface RunAgentLoopArgs {
   messages: Message[];
@@ -111,6 +126,19 @@ export const runAgentLoop = async ({
     const searchPromises = queryPlan.queries.map(async (query) => {
       // Fetch search results with scraped content
       const searchResults = await searchAndScrapeWeb(query);
+
+      // Send source annotation immediately after search completion
+      writeMessageAnnotation({
+        type: "SEARCH_SOURCES",
+        query,
+        sources: searchResults.map((result) => ({
+          title: result.title,
+          url: result.url,
+          snippet: result.snippet,
+          favicon: getFaviconUrl(result.url),
+          date: result.date,
+        })),
+      } satisfies OurMessageAnnotation);
 
       // Get conversation history for summarization context
       const conversationHistory = ctx.getConversationHistory();

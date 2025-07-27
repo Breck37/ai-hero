@@ -1,6 +1,7 @@
 import ReactMarkdown, { type Components } from "react-markdown";
 import type { Message } from "ai";
 import { ReasoningSteps } from "./reasoning-steps";
+import { SearchSources } from "./search-sources";
 import type { OurMessageAnnotation } from "../run-agent-loop";
 
 export type MessagePart = NonNullable<Message["parts"]>[number];
@@ -236,8 +237,13 @@ export const ChatMessage = ({
           {isAI ? "AI" : userName}
         </p>
 
-        {/* Show reasoning steps for AI messages */}
-        {isAI && <ReasoningSteps annotations={annotations} />}
+        {/* Show search sources and reasoning steps for AI messages */}
+        {isAI && (
+          <>
+            <SearchSources annotations={annotations} />
+            <ReasoningSteps annotations={annotations} />
+          </>
+        )}
 
         <div className="prose prose-invert max-w-none">
           {Array.isArray(parts) ? (
