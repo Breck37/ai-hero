@@ -17,17 +17,6 @@ export const ReasoningSteps = ({
 
   if (annotations.length === 0) return null;
 
-  // Debug logging
-  console.log(
-    "ReasoningSteps received annotations:",
-    annotations.map((a) => ({
-      type: a.action.type,
-      title: a.action.title,
-      hasFeedback: !!a.action.feedback,
-      feedback: a.action.feedback,
-    })),
-  );
-
   return (
     <div className="mb-4 w-full">
       <ul className="space-y-1">
