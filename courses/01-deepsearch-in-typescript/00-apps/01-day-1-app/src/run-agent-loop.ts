@@ -3,8 +3,7 @@ import { SystemContext } from "./system-context";
 import { getNextAction, type Action } from "./get-next-action";
 import { queryRewriter, type QueryRewriterResult } from "./query-rewriter";
 import { answerQuestion } from "./answer-question";
-import { searchSerper } from "./serper";
-import { bulkCrawlWebsites } from "./scraper";
+import { searchAndScrapeWithTavily } from "./tavily";
 import { summarizeURL } from "./summarize-url";
 import { env } from "./env";
 import type { LocationHints } from "./types";
@@ -16,50 +15,14 @@ export type OurMessageAnnotation = {
   queryPlan?: QueryRewriterResult;
 };
 
-// Copy of the search function from deep-search.ts
-const searchWeb = async (query: string) => {
-  const results = await searchSerper(
-    { q: query, num: env.SEARCH_RESULTS_COUNT },
-    undefined, // abortSignal
+// Combined search and scrape function using Tavily
+const searchAndScrapeWeb = async (query: string) => {
+  const results = await searchAndScrapeWithTavily(
+    query,
+    env.SEARCH_RESULTS_COUNT,
+    undefined,
   );
-
-  const mappedResults: Array<{
-    title: string;
-    link: string;
-    snippet: string;
-    date?: string;
-  }> = results.organic.map((result) => ({
-    title: result.title,
-    link: result.link,
-    snippet: result.snippet,
-    date: result.date,
-  }));
-
-  return mappedResults;
-};
-
-// Copy of the scrape function from deep-search.ts
-const scrapeUrl = async (urls: string[]) => {
-  const results = await bulkCrawlWebsites({ urls });
-
-  if (!results.success) {
-    // Return an array with error information
-    return results.results.map((r) => ({
-      url: r.url,
-      success: false,
-      error: r.result.success ? "" : r.result.error,
-      data: r.result.success ? r.result.data : "",
-    }));
-  }
-
-  // Return an array of successful results
-  return results.results.map((r) => ({
-    url: r.url,
-    success: true,
-    data: r.result.data,
-    date: r.result.date,
-    error: "",
-  }));
+  return results.results;
 };
 
 export interface RunAgentLoopArgs {
@@ -90,42 +53,33 @@ export const runAgentLoop = async ({
     // 1. Run the query rewriter
     const queryPlan = await queryRewriter(ctx, langfuseTraceId);
 
-    // 2. Search based on the queries
+    // 2. Search and scrape based on the queries using Tavily
     const searchPromises = queryPlan.queries.map(async (query) => {
-      // Fetch search results
-      const searchResults = await searchWeb(query);
-      // Scrape each URL
-      const urls = searchResults.map((result) => result.link);
-      const scrapeResults = await scrapeUrl(urls);
+      // Fetch search results with scraped content
+      const searchResults = await searchAndScrapeWeb(query);
 
       // Get conversation history for summarization context
       const conversationHistory = ctx.getConversationHistory();
 
-      // Summarize each successful scrape result in parallel
+      // Summarize each result in parallel
       const summaryPromises = searchResults.map(async (result) => {
-        const scrape = scrapeResults.find((s) => s.url === result.link);
-
-        if (scrape && scrape.success) {
-          try {
-            const summary = await summarizeURL({
-              conversationHistory,
-              scrapedContent: scrape.data,
-              searchMetadata: {
-                date: result.date || "Unknown",
-                title: result.title,
-                url: result.link,
-                snippet: result.snippet,
-              },
-              query: query,
-              langfuseTraceId,
-            });
-            return summary;
-          } catch (error) {
-            console.error("Summarization failed for", result.link, error);
-            return scrape.data; // Fallback to original content
-          }
-        } else {
-          return scrape ? `Error: ${scrape.error}` : "No scrape result";
+        try {
+          const summary = await summarizeURL({
+            conversationHistory,
+            scrapedContent: result.scrapedContent,
+            searchMetadata: {
+              date: result.date || "Unknown",
+              title: result.title,
+              url: result.url,
+              snippet: result.snippet,
+            },
+            query: query,
+            langfuseTraceId,
+          });
+          return summary;
+        } catch (error) {
+          console.error("Summarization failed for", result.url, error);
+          return result.scrapedContent; // Fallback to original content
         }
       });
 
@@ -135,7 +89,7 @@ export const runAgentLoop = async ({
       const combinedResults = searchResults.map((result, index) => ({
         date: result.date || "Unknown",
         title: result.title,
-        url: result.link,
+        url: result.url,
         snippet: result.snippet,
         scrapedContent: summaries[index] || "No content available",
       }));
