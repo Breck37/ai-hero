@@ -213,8 +213,8 @@ Please provide a comprehensive answer to the user's question based on the inform
     experimental_transform: [
       markdownJoinerTransform,
       smoothStream({
-        delayInMs: 20,
-        chunking: "line",
+        delayInMs: 100,
+        chunking: "word",
       }),
     ],
     experimental_telemetry: langfuseTraceId

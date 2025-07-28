@@ -13,7 +13,7 @@ import { Langfuse } from "langfuse";
 import { env } from "~/env";
 import { streamFromDeepSearch } from "~/deep-search";
 import { checkRateLimit, recordRateLimit } from "~/server/rate-limit";
-import type { OurMessageAnnotation } from "~/run-agent-loop";
+import type { OurMessageAnnotation } from "~/types";
 import { generateChatTitle } from "~/generate-chat-title";
 import { geolocation } from "@vercel/functions";
 
@@ -254,7 +254,6 @@ export async function POST(request: Request) {
       await upsertChat({
         userId,
         chatId,
-        title: "Generating...",
         useSearchGrounding: chatUseSearchGrounding,
         useTavily: chatUseTavily,
         messages: messages, // This includes the user's new message
@@ -446,6 +445,28 @@ export async function POST(request: Request) {
       }
 
       if (agentError) {
+        // Check if it's a Tavily usage limit error and provide a user-friendly message
+        if (agentError.includes("TAVILY_USAGE_LIMIT_EXCEEDED")) {
+          // Automatically update chat settings to use manual search
+          try {
+            await upsertChat({
+              userId,
+              chatId,
+              useSearchGrounding: false, // Use external tool mode
+              useTavily: false, // Disable Tavily
+              messages: [], // Empty array means we're only updating settings
+            });
+            console.log(
+              "Chat settings automatically updated to manual search mode",
+            );
+          } catch (updateError) {
+            console.error("Failed to update chat settings:", updateError);
+          }
+
+          throw new Error(
+            "We've temporarily hit our search service limits. I've automatically switched to manual search mode and should work normally now. Please try your question again!",
+          );
+        }
         // Throw error to be caught by the top-level POST handler
         throw new Error(agentError);
       }

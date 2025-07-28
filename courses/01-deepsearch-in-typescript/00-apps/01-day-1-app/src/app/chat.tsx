@@ -2,13 +2,14 @@
 
 import { ChatMessage } from "~/components/chat-message";
 import { useChat } from "@ai-sdk/react";
-import { Square, AlertTriangle } from "lucide-react";
-import { useState, useEffect } from "react";
+import { Square, AlertTriangle, WifiOff } from "lucide-react";
+import { useState, useEffect, useMemo, useCallback, memo } from "react";
 import { useRouter } from "next/navigation";
-import { isNewChatCreated } from "~/utils";
+import { isNewChatCreated, isTavilyLimitExceeded } from "~/utils";
 import { StickToBottom } from "use-stick-to-bottom";
+import { Toaster, toast } from "sonner";
 import type { Message } from "ai";
-import type { OurMessageAnnotation } from "~/run-agent-loop";
+import type { OurMessageAnnotation } from "~/types";
 
 interface ChatProps {
   userName: string;
@@ -25,6 +26,172 @@ interface UsageStats {
   limit: number;
   isAdmin: boolean;
 }
+
+// Debounced input handler to reduce re-renders
+const useDebouncedInput = (delay: number = 100) => {
+  const [debouncedValue, setDebouncedValue] = useState("");
+  const [immediateValue, setImmediateValue] = useState("");
+
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedValue(immediateValue);
+    }, delay);
+
+    return () => {
+      clearTimeout(handler);
+    };
+  }, [immediateValue, delay]);
+
+  return [immediateValue, setImmediateValue, debouncedValue] as const;
+};
+
+// Memoized usage stats component
+const UsageStatsDisplay = memo(({ usageStats }: { usageStats: UsageStats }) => {
+  const isNearLimit = !usageStats.isAdmin
+    ? usageStats.totalRequests >= usageStats.limit * 0.8
+    : false;
+  const isAtLimit = !usageStats.isAdmin
+    ? usageStats.totalRequests >= usageStats.limit
+    : false;
+
+  return (
+    <div className="border-b border-gray-700 bg-gray-800 p-3">
+      <div className="mx-auto max-w-[65ch]">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-4 text-sm">
+            {usageStats.isAdmin ? (
+              <div className="flex items-center gap-2">
+                <span className="font-semibold text-purple-300">👑 Admin</span>
+                <span className="text-gray-300">
+                  Today's Usage: {usageStats.totalRequests} (Unlimited)
+                </span>
+              </div>
+            ) : (
+              <span className="text-gray-300">
+                Today's Usage: {usageStats.totalRequests}/{usageStats.limit}
+              </span>
+            )}
+            <span className="text-gray-400">
+              ({usageStats.searchGroundingRequests} search grounding,{" "}
+              {usageStats.externalToolRequests} external tool)
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            {usageStats.isAdmin && (
+              <div className="flex items-center gap-1 text-purple-400">
+                <span className="text-xs">Unlimited access</span>
+              </div>
+            )}
+            {!usageStats.isAdmin && isAtLimit && (
+              <div className="flex items-center gap-1 text-red-400">
+                <AlertTriangle className="size-4" />
+                <span className="text-xs">Limit reached</span>
+              </div>
+            )}
+            {!usageStats.isAdmin && isNearLimit && !isAtLimit && (
+              <div className="flex items-center gap-1 text-yellow-400">
+                <AlertTriangle className="size-4" />
+                <span className="text-xs">Near limit</span>
+              </div>
+            )}
+            {isTavilyLimitExceeded() && (
+              <div className="flex items-center gap-1 text-orange-400">
+                <WifiOff className="size-4" />
+                <span className="text-xs">Manual search mode</span>
+              </div>
+            )}
+          </div>
+        </div>
+        {/* Progress bar - only show for non-admin users */}
+        {!usageStats.isAdmin && (
+          <div className="mt-2 h-1 w-full overflow-hidden rounded-full bg-gray-700">
+            <div
+              className={`h-full transition-all duration-300 ${
+                isAtLimit
+                  ? "bg-red-500"
+                  : isNearLimit
+                    ? "bg-yellow-500"
+                    : "bg-green-500"
+              }`}
+              style={{
+                width: `${Math.min((usageStats.totalRequests / usageStats.limit) * 100, 100)}%`,
+              }}
+            />
+          </div>
+        )}
+      </div>
+    </div>
+  );
+});
+
+UsageStatsDisplay.displayName = "UsageStatsDisplay";
+
+// Memoized chat input component
+const ChatInput = memo(
+  ({
+    input,
+    onInputChange,
+    onSubmit,
+    isLoading,
+    chatLoading,
+    isAtLimit,
+    isAdmin,
+  }: {
+    input: string;
+    onInputChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+    onSubmit: (e: React.FormEvent) => void;
+    isLoading: boolean;
+    chatLoading: boolean;
+    isAtLimit: boolean;
+    isAdmin: boolean;
+  }) => {
+    const placeholder = useMemo(() => {
+      if (!isAdmin && isAtLimit) return "Daily limit reached";
+      if (chatLoading) return "AI is working on your request...";
+      return "Ask me anything - I'll search the web for you!";
+    }, [isAdmin, isAtLimit, chatLoading]);
+
+    const isDisabled = isLoading || chatLoading || (!isAdmin && isAtLimit);
+
+    // No complex loading logic - just let the button show loading state
+
+    return (
+      <form onSubmit={onSubmit} className="mx-auto max-w-[65ch] p-4">
+        <div className="flex gap-2">
+          <input
+            value={input}
+            onChange={onInputChange}
+            placeholder={placeholder}
+            autoFocus
+            aria-label="Chat input"
+            className="flex-1 rounded border border-gray-700 bg-gray-800 p-2 text-gray-200 placeholder-gray-400 focus:border-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-400 disabled:opacity-50"
+            disabled={isDisabled}
+          />
+          <button
+            type="submit"
+            disabled={isDisabled}
+            className={`rounded px-4 py-2 text-white transition-all duration-200 focus:border-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-400 ${
+              isDisabled
+                ? "cursor-not-allowed bg-gray-700 opacity-50"
+                : "bg-blue-600 hover:bg-blue-500 active:scale-95"
+            }`}
+          >
+            {isLoading || chatLoading ? (
+              <div className="flex items-center gap-2">
+                <Square className="size-4 animate-spin" />
+                <span className="text-sm">Working...</span>
+              </div>
+            ) : (
+              "Send"
+            )}
+          </button>
+        </div>
+      </form>
+    );
+  },
+);
+
+ChatInput.displayName = "ChatInput";
 
 export const ChatPage = ({
   userName,
@@ -44,6 +211,7 @@ export const ChatPage = ({
     handleSubmit,
     isLoading: chatLoading,
     data,
+    append,
   } = useChat({
     api: "/api/chat",
     body: {
@@ -56,10 +224,21 @@ export const ChatPage = ({
         // Refresh usage stats when rate limit is hit
         fetchUsageStats();
       }
+      if (error.message?.includes("search service limits")) {
+        // Show toast when Tavily limits are hit and manual search is enabled
+        toast.info(
+          "Search service limits reached. Automatically switched to manual search mode.",
+          {
+            description:
+              "Your chat will now use manual search instead of Tavily.",
+            duration: 5000,
+          },
+        );
+      }
     },
   });
 
-  const fetchUsageStats = async () => {
+  const fetchUsageStats = useCallback(async () => {
     try {
       const response = await fetch("/api/usage");
       if (response.ok) {
@@ -69,13 +248,13 @@ export const ChatPage = ({
     } catch (error) {
       console.error("Failed to fetch usage stats:", error);
     }
-  };
+  }, []);
 
   useEffect(() => {
     if (isAuthenticated) {
       fetchUsageStats();
     }
-  }, [isAuthenticated]);
+  }, [isAuthenticated, fetchUsageStats]);
 
   // Handle new chat creation redirect
   useEffect(() => {
@@ -86,18 +265,56 @@ export const ChatPage = ({
     }
   }, [data, router]);
 
-  const handleSubmitWithUsage = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsLoading(true);
+  const handleSubmitWithUsage = useCallback(
+    async (e: React.FormEvent) => {
+      e.preventDefault();
 
-    try {
-      await handleSubmit(e);
-      // Refresh usage stats after successful request
-      setTimeout(fetchUsageStats, 1000);
-    } finally {
-      setIsLoading(false);
+      setIsLoading(true);
+
+      try {
+        await handleSubmit(e);
+        // Refresh usage stats after successful request
+        setTimeout(fetchUsageStats, 1000);
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [handleSubmit, fetchUsageStats],
+  );
+
+  const handleInputChangeOptimized = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      handleInputChange(e);
+    },
+    [handleInputChange],
+  );
+
+  // Memoize computed values
+  const isAtLimit = useMemo(
+    () =>
+      usageStats && !usageStats.isAdmin
+        ? usageStats.totalRequests >= usageStats.limit
+        : false,
+    [usageStats],
+  );
+
+  const isAdmin = useMemo(() => usageStats?.isAdmin ?? false, [usageStats]);
+
+  // Show toast when Tavily limit is exceeded and manual search mode is active
+  useEffect(() => {
+    if (isTavilyLimitExceeded()) {
+      toast.info("Manual search mode activated", {
+        description:
+          "Search service limits reached. Using manual search instead.",
+        duration: 4000,
+      });
     }
-  };
+  }, []);
+
+  const maxHeight = useMemo(
+    () => (usageStats ? "213px" : "185px"),
+    [usageStats],
+  );
 
   if (!isAuthenticated) {
     return (
@@ -114,85 +331,13 @@ export const ChatPage = ({
     );
   }
 
-  const isNearLimit =
-    usageStats && !usageStats.isAdmin
-      ? usageStats.totalRequests >= usageStats.limit * 0.8
-      : false;
-  const isAtLimit =
-    usageStats && !usageStats.isAdmin
-      ? usageStats.totalRequests >= usageStats.limit
-      : false;
-
   return (
     <div className="flex flex-1 flex-col">
       {/* Usage Stats */}
-      {usageStats && (
-        <div className="border-b border-gray-700 bg-gray-800 p-3">
-          <div className="mx-auto max-w-[65ch]">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-4 text-sm">
-                {usageStats.isAdmin ? (
-                  <div className="flex items-center gap-2">
-                    <span className="font-semibold text-purple-300">
-                      👑 Admin
-                    </span>
-                    <span className="text-gray-300">
-                      Today's Usage: {usageStats.totalRequests} (Unlimited)
-                    </span>
-                  </div>
-                ) : (
-                  <span className="text-gray-300">
-                    Today's Usage: {usageStats.totalRequests}/{usageStats.limit}
-                  </span>
-                )}
-                <span className="text-gray-400">
-                  ({usageStats.searchGroundingRequests} search grounding,{" "}
-                  {usageStats.externalToolRequests} external tool)
-                </span>
-              </div>
-              <div className="flex items-center gap-2">
-                {usageStats.isAdmin && (
-                  <div className="flex items-center gap-1 text-purple-400">
-                    <span className="text-xs">Unlimited access</span>
-                  </div>
-                )}
-                {!usageStats.isAdmin && isAtLimit && (
-                  <div className="flex items-center gap-1 text-red-400">
-                    <AlertTriangle className="size-4" />
-                    <span className="text-xs">Limit reached</span>
-                  </div>
-                )}
-                {!usageStats.isAdmin && isNearLimit && !isAtLimit && (
-                  <div className="flex items-center gap-1 text-yellow-400">
-                    <AlertTriangle className="size-4" />
-                    <span className="text-xs">Near limit</span>
-                  </div>
-                )}
-              </div>
-            </div>
-            {/* Progress bar - only show for non-admin users */}
-            {!usageStats.isAdmin && (
-              <div className="mt-2 h-1 w-full overflow-hidden rounded-full bg-gray-700">
-                <div
-                  className={`h-full transition-all duration-300 ${
-                    isAtLimit
-                      ? "bg-red-500"
-                      : isNearLimit
-                        ? "bg-yellow-500"
-                        : "bg-green-500"
-                  }`}
-                  style={{
-                    width: `${Math.min((usageStats.totalRequests / usageStats.limit) * 100, 100)}%`,
-                  }}
-                />
-              </div>
-            )}
-          </div>
-        </div>
-      )}
+      {usageStats && <UsageStatsDisplay usageStats={usageStats} />}
 
       <StickToBottom
-        className={`relative mx-auto overflow-hidden max-h-[calc(100%-${usageStats ? "213px" : "185px"})] w-full max-w-[65ch] flex-1 p-4 [&>div]:scrollbar-thin [&>div]:scrollbar-track-gray-800 [&>div]:scrollbar-thumb-gray-600 [&>div]:hover:scrollbar-thumb-gray-500`}
+        className={`relative mx-auto overflow-hidden max-h-[calc(100%-${maxHeight})] w-full max-w-[65ch] flex-1 p-4 [&>div]:scrollbar-thin [&>div]:scrollbar-track-gray-800 [&>div]:scrollbar-thumb-gray-600 [&>div]:hover:scrollbar-thumb-gray-500`}
         resize="smooth"
         initial="smooth"
       >
@@ -204,7 +349,7 @@ export const ChatPage = ({
           {messages.map((message, index) => {
             return (
               <ChatMessage
-                key={index}
+                key={`${message.id || index}-${message.role}`}
                 parts={message.parts ?? []}
                 role={message.role}
                 userName={userName}
@@ -219,47 +364,17 @@ export const ChatPage = ({
       </StickToBottom>
 
       <div className="relative border-t border-gray-700">
-        <form
+        <ChatInput
+          input={input}
+          onInputChange={handleInputChangeOptimized}
           onSubmit={handleSubmitWithUsage}
-          className="mx-auto max-w-[65ch] p-4"
-        >
-          <div className="flex gap-2">
-            <input
-              value={input}
-              onChange={handleInputChange}
-              placeholder={
-                !usageStats?.isAdmin && isAtLimit
-                  ? "Daily limit reached"
-                  : chatLoading
-                    ? "Searching the web and gathering information..."
-                    : "Say something..."
-              }
-              autoFocus
-              aria-label="Chat input"
-              className="flex-1 rounded border border-gray-700 bg-gray-800 p-2 text-gray-200 placeholder-gray-400 focus:border-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-400 disabled:opacity-50"
-              disabled={
-                isLoading || chatLoading || (!usageStats?.isAdmin && isAtLimit)
-              }
-            />
-            <button
-              type="submit"
-              disabled={
-                isLoading || chatLoading || (!usageStats?.isAdmin && isAtLimit)
-              }
-              className="rounded bg-gray-700 px-4 py-2 text-white hover:bg-gray-600 focus:border-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-400 disabled:opacity-50 disabled:hover:bg-gray-700"
-            >
-              {isLoading || chatLoading ? (
-                <div className="flex items-center gap-2">
-                  <Square className="size-4 animate-spin" />
-                  <span className="text-sm">Searching...</span>
-                </div>
-              ) : (
-                "Send"
-              )}
-            </button>
-          </div>
-        </form>
+          isLoading={isLoading}
+          chatLoading={chatLoading}
+          isAtLimit={isAtLimit}
+          isAdmin={isAdmin}
+        />
       </div>
+      <Toaster position="top-right" richColors />
     </div>
   );
 };

@@ -25,13 +25,18 @@ export class SystemContext {
   private searchHistory: SearchHistoryEntry[] = [];
   private locationHints?: LocationHints;
 
+  /**
+   * The most recent feedback from getNextAction
+   */
+  private lastFeedback?: string;
+
   constructor(messages: Message[], locationHints?: LocationHints) {
     this.messages = messages;
     this.locationHints = locationHints;
   }
 
   shouldStop() {
-    return this.step >= 10;
+    return this.step >= 5;
   }
 
   incrementStep() {
@@ -123,5 +128,19 @@ export class SystemContext {
     }
 
     return `USER LOCATION:\n- City: ${this.locationHints.city || "Unknown"}\n- Country: ${this.locationHints.country || "Unknown"}\n- Coordinates: ${this.locationHints.latitude || "Unknown"}, ${this.locationHints.longitude || "Unknown"}\n\nWhen users ask for location-based information (restaurants, weather, local events, etc.), use their location to provide relevant results.`;
+  }
+
+  /**
+   * Store the most recent feedback from getNextAction
+   */
+  setLastFeedback(feedback: string) {
+    this.lastFeedback = feedback;
+  }
+
+  /**
+   * Get the most recent feedback from getNextAction
+   */
+  getLastFeedback(): string | undefined {
+    return this.lastFeedback;
   }
 }

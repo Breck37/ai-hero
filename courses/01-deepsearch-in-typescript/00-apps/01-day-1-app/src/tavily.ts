@@ -1,6 +1,7 @@
 import { tavily } from "@tavily/core";
 import { cacheWithRedis } from "~/server/redis/redis";
 import { env } from "~/env.js";
+import { setTavilyLimitExceeded } from "./utils";
 
 export interface TavilySearchResult {
   title: string;
@@ -28,15 +29,30 @@ const searchWithTavily = cacheWithRedis(
     numResults: number,
     _signal: AbortSignal | undefined,
   ): Promise<TavilySearchResponse> => {
-    const response = await tavilyClient.search(query, {
-      num: numResults,
-      search_depth: "advanced", // This enables content scraping
-      include_answer: true,
-      include_images: false,
-      include_raw_content: true,
-    });
+    try {
+      const response = await tavilyClient.search(query, {
+        num: numResults,
+        search_depth: "advanced", // This enables content scraping
+        include_answer: true,
+        include_images: false,
+        include_raw_content: true,
+      });
 
-    return response;
+      return response;
+    } catch (error) {
+      // Check if it's a usage limit error
+      if (
+        error &&
+        typeof error === "object" &&
+        "message" in error &&
+        typeof error.message === "string" &&
+        error.message.includes("usage limit")
+      ) {
+        setTavilyLimitExceeded(true);
+        throw new Error("TAVILY_USAGE_LIMIT_EXCEEDED");
+      }
+      throw error;
+    }
   },
 );
 

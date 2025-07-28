@@ -1,13 +1,17 @@
-import {
-  streamText,
-  type Message,
-  type TelemetrySettings,
-  type StreamTextResult,
-} from "ai";
-import { modelWithSearchGrounding } from "@/model";
-import { checkRateLimit, recordRateLimit } from "~/server/rate-limit";
-import { runAgentLoop, type OurMessageAnnotation } from "./run-agent-loop";
-import type { LocationHints } from "./types";
+import { type StreamTextResult, type Message, streamText } from "ai";
+import { model, modelWithSearchGrounding } from "../model";
+import { runAgentLoop } from "./run-agent-loop";
+import { checkRateLimit, recordRateLimit } from "./server/rate-limit";
+import { isTavilyLimitExceeded } from "./utils";
+import type { OurMessageAnnotation, LocationHints } from "./types";
+
+export type TelemetrySettings = {
+  isEnabled: boolean;
+  functionId?: string;
+  metadata?: {
+    langfuseTraceId?: string;
+  };
+};
 
 // Helper function to get current date and time
 const getCurrentDateTime = () => {
@@ -76,6 +80,9 @@ You have native search grounding capabilities, so you'll automatically search wh
     );
   } else {
     // Use the new agent loop
+    // Automatically disable Tavily if usage limit is exceeded
+    const shouldUseTavily = opts.useTavily && !isTavilyLimitExceeded();
+
     return runAgentLoop({
       messages: opts.messages,
       writeMessageAnnotation: opts.writeMessageAnnotation,
@@ -84,7 +91,7 @@ You have native search grounding capabilities, so you'll automatically search wh
       locationHints: opts.locationHints,
       chatId: opts.chatId,
       userId: opts.userId,
-      useTavily: opts.useTavily,
+      useTavily: shouldUseTavily,
     });
   }
 };
