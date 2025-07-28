@@ -447,6 +447,22 @@ export async function POST(request: Request) {
       if (agentError) {
         // Check if it's a Tavily usage limit error and provide a user-friendly message
         if (agentError.includes("TAVILY_USAGE_LIMIT_EXCEEDED")) {
+          // Automatically update chat settings to use manual search
+          try {
+            await upsertChat({
+              userId,
+              chatId,
+              useSearchGrounding: false, // Use external tool mode
+              useTavily: false, // Disable Tavily
+              messages: [], // Empty array means we're only updating settings
+            });
+            console.log(
+              "Chat settings automatically updated to manual search mode",
+            );
+          } catch (updateError) {
+            console.error("Failed to update chat settings:", updateError);
+          }
+
           throw new Error(
             "We've temporarily hit our search service limits. I've automatically switched to manual search mode and should work normally now. Please try your question again!",
           );

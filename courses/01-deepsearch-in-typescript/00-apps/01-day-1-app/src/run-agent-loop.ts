@@ -37,6 +37,9 @@ export const runAgentLoop = async ({
   // A persistent container for the state of our system
   const ctx = new SystemContext(messages, locationHints);
 
+  // Track if we've already handled Tavily limit for this session
+  let tavilyLimitHandled = false;
+
   // Combined search and scrape function using either Tavily or manual method
   const searchAndScrapeWeb = async (query: string) => {
     if (useTavily) {
@@ -54,25 +57,31 @@ export const runAgentLoop = async ({
           error instanceof Error &&
           error.message === "TAVILY_USAGE_LIMIT_EXCEEDED"
         ) {
-          console.warn(
-            "Tavily usage limit exceeded, falling back to manual search",
-          );
+          // Only handle Tavily limit once per session
+          if (!tavilyLimitHandled) {
+            console.warn(
+              "Tavily usage limit exceeded, switching to manual search mode",
+            );
 
-          // Send annotation about the fallback
-          writeMessageAnnotation({
-            type: "NEW_ACTION",
-            action: {
-              type: "continue",
-              title: "Tavily usage limit reached - using manual search",
-              reasoning:
-                "Tavily API usage limit has been exceeded. Automatically falling back to manual search and scrape method.",
-              feedback: "Switched to manual search due to API limits",
-            },
-            queryPlan: {
-              plan: "Fallback to manual search due to Tavily usage limits",
-              queries: [query],
-            },
-          } satisfies OurMessageAnnotation);
+            // Send annotation about the fallback (only once)
+            writeMessageAnnotation({
+              type: "NEW_ACTION",
+              action: {
+                type: "continue",
+                title:
+                  "Tavily usage limit reached - switching to manual search",
+                reasoning:
+                  "Tavily API usage limit has been exceeded. Automatically switching to manual search mode for this chat.",
+                feedback: "Switched to manual search due to API limits",
+              },
+              queryPlan: {
+                plan: "Fallback to manual search due to Tavily usage limits",
+                queries: [query],
+              },
+            } satisfies OurMessageAnnotation);
+
+            tavilyLimitHandled = true;
+          }
 
           // Fall back to manual search
           const searchResults = await searchSerper(

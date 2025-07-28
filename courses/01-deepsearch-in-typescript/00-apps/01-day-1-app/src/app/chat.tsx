@@ -7,6 +7,7 @@ import { useState, useEffect, useMemo, useCallback, memo } from "react";
 import { useRouter } from "next/navigation";
 import { isNewChatCreated, isTavilyLimitExceeded } from "~/utils";
 import { StickToBottom } from "use-stick-to-bottom";
+import { Toaster, toast } from "sonner";
 import type { Message } from "ai";
 import type { OurMessageAnnotation } from "~/types";
 
@@ -223,6 +224,17 @@ export const ChatPage = ({
         // Refresh usage stats when rate limit is hit
         fetchUsageStats();
       }
+      if (error.message?.includes("search service limits")) {
+        // Show toast when Tavily limits are hit and manual search is enabled
+        toast.info(
+          "Search service limits reached. Automatically switched to manual search mode.",
+          {
+            description:
+              "Your chat will now use manual search instead of Tavily.",
+            duration: 5000,
+          },
+        );
+      }
     },
   });
 
@@ -288,6 +300,17 @@ export const ChatPage = ({
 
   const isAdmin = useMemo(() => usageStats?.isAdmin ?? false, [usageStats]);
 
+  // Show toast when Tavily limit is exceeded and manual search mode is active
+  useEffect(() => {
+    if (isTavilyLimitExceeded()) {
+      toast.info("Manual search mode activated", {
+        description:
+          "Search service limits reached. Using manual search instead.",
+        duration: 4000,
+      });
+    }
+  }, []);
+
   const maxHeight = useMemo(
     () => (usageStats ? "213px" : "185px"),
     [usageStats],
@@ -351,6 +374,7 @@ export const ChatPage = ({
           isAdmin={isAdmin}
         />
       </div>
+      <Toaster position="top-right" richColors />
     </div>
   );
 };
