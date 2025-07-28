@@ -51,7 +51,11 @@ SEARCH_RESULTS_COUNT=5
 NODE_ENV=development
 ```
 
-4. Run `./start-database.sh` to start the database.
+4. Start server: `pnpm dev`
+
+5. Run `./start-database.sh` to start the database.
+
+After initialized, use `pnpm db:studio`
 
 5. Run `./start-redis.sh` to start the Redis server.
 
@@ -60,3 +64,5 @@ NODE_ENV=development
 ```bash
 node test-tavily.js
 ```
+
+If using mcp tools: `npx @modelcontextprotocol/server-everything sse`
